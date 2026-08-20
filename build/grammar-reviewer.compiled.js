@@ -1397,13 +1397,10 @@ function createProviderInstance({ provider = DEFAULT_PROVIDER, apiKey = "", base
 // anp-23-grammar-reviewer/lib/features/launcher.js
 async function launchReviewer(app, targetNoteUUID, forcePrompt = false) {
   try {
-    let noteUUID = targetNoteUUID || app.context?.noteUUID;
+    let noteUUID = targetNoteUUID || null;
     let noteTitle = "Untitled Note";
-    if (!noteUUID && !forcePrompt) {
-      noteUUID = app.settings?.["Last Opened Note UUID"] || null;
-    }
     if (!noteUUID || forcePrompt) {
-      const selected = await app.prompt("Select note for Grammar Review:", {
+      const selected = await app.prompt("Select note for Grammar Review (or Cancel to open Settings/Usage):", {
         inputs: [
           {
             label: "Search Note",
@@ -1411,66 +1408,76 @@ async function launchReviewer(app, targetNoteUUID, forcePrompt = false) {
           }
         ]
       });
-      if (!selected) return;
-      if (typeof selected === "object" && selected !== null) {
-        noteUUID = selected.uuid;
-        if (selected.name) {
-          noteTitle = selected.name;
+      if (selected) {
+        if (Array.isArray(selected)) {
+          const item = selected[0];
+          if (item && typeof item === "object") {
+            noteUUID = item.uuid || item.value || item.id || null;
+            if (item.name || item.label) noteTitle = item.name || item.label;
+          } else if (typeof item === "string") {
+            noteUUID = item;
+          }
+        } else if (typeof selected === "object" && selected !== null) {
+          noteUUID = selected.uuid || selected.value || selected.id || null;
+          if (selected.name || selected.label) {
+            noteTitle = selected.name || selected.label;
+          }
+        } else if (typeof selected === "string") {
+          noteUUID = selected.trim();
         }
-      } else if (typeof selected === "string") {
-        noteUUID = selected;
+      } else {
+        noteUUID = null;
       }
     }
-    if (!noteUUID) {
-      await app.alert("No note was selected.");
-      return;
-    }
-    if (typeof app.setSetting === "function") {
+    if (noteUUID) {
+      let noteContent = "";
+      let noteTags = [];
       try {
-        await app.setSetting("Last Opened Note UUID", noteUUID);
-      } catch (saveErr) {
-        console.warn("[GrammarReviewer] Could not save Last Opened Note UUID:", saveErr);
+        noteContent = await app.getNoteContent({ uuid: noteUUID }) || "";
+      } catch (fetchErr) {
+        console.warn("[GrammarReviewer] getNoteContent error:", fetchErr);
       }
-    }
-    let noteContent = "";
-    let noteTags = [];
-    try {
-      noteContent = await app.getNoteContent({ uuid: noteUUID }) || "";
-    } catch (fetchErr) {
-      console.warn("[GrammarReviewer] getNoteContent error:", fetchErr);
-    }
-    try {
-      if (typeof app.getNoteTags === "function") {
-        noteTags = await app.getNoteTags({ uuid: noteUUID }) || [];
-      }
-    } catch (tagErr) {
-      console.warn("[GrammarReviewer] getNoteTags error:", tagErr);
-    }
-    try {
-      const noteHandle = await app.findNote({ uuid: noteUUID });
-      if (noteHandle) {
-        if (noteHandle.name && (noteTitle === "Untitled Note" || !noteTitle)) {
-          noteTitle = noteHandle.name;
+      try {
+        if (typeof app.getNoteTags === "function") {
+          noteTags = await app.getNoteTags({ uuid: noteUUID }) || [];
         }
-        if ((!noteTags || noteTags.length === 0) && Array.isArray(noteHandle.tags)) {
-          noteTags = noteHandle.tags;
-        }
+      } catch (tagErr) {
+        console.warn("[GrammarReviewer] getNoteTags error:", tagErr);
       }
-    } catch (findErr) {
-      console.warn("[GrammarReviewer] findNote error:", findErr);
+      try {
+        const noteHandle = await app.findNote({ uuid: noteUUID });
+        if (noteHandle) {
+          if (noteHandle.name && (noteTitle === "Untitled Note" || !noteTitle)) {
+            noteTitle = noteHandle.name;
+          }
+          if ((!noteTags || noteTags.length === 0) && Array.isArray(noteHandle.tags)) {
+            noteTags = noteHandle.tags;
+          }
+        }
+      } catch (findErr) {
+        console.warn("[GrammarReviewer] findNote error:", findErr);
+      }
+      const config = getProviderConfig(app);
+      const session = new ReviewSession({
+        noteUUID,
+        noteTitle,
+        noteTags,
+        originalContent: noteContent,
+        granularity: GRANULARITY_MODES.FULL,
+        provider: config.provider,
+        model: config.customModel || DEFAULT_MODELS[config.provider] || ""
+      });
+      setActiveSession(session);
+    } else {
+      setActiveSession(null);
     }
-    const config = getProviderConfig(app);
-    const session = new ReviewSession({
-      noteUUID,
-      noteTitle,
-      noteTags,
-      originalContent: noteContent,
-      granularity: GRANULARITY_MODES.FULL,
-      provider: config.provider,
-      model: config.customModel || DEFAULT_MODELS[config.provider] || ""
-    });
-    setActiveSession(session);
-    await app.openEmbed();
+    if (typeof app.openEmbed === "function") {
+      await app.openEmbed();
+    }
+    const pluginUUID = app.context?.pluginUUID || app.pluginUUID;
+    if (pluginUUID && typeof app.navigate === "function") {
+      await app.navigate(`https://www.amplenote.com/notes/plugins/${pluginUUID}`);
+    }
   } catch (err) {
     console.error("[GrammarReviewer] Error in launchReviewer:", err);
     const errorMsg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Unknown error occurred";
@@ -1583,6 +1590,135 @@ function getPromptPreset(id) {
   return found || PREBUILT_PROMPTS[0];
 }
 
+// anp-23-grammar-reviewer/lib/data/usageTracker.js
+var USAGE_SETTING_KEY = "AI Usage Stats";
+function getTodayDateString() {
+  const d = /* @__PURE__ */ new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+function createProviderBucket() {
+  return {
+    today: { success: 0, failed: 0 },
+    lifetime: { success: 0, failed: 0 }
+  };
+}
+function getDefaultUsageStats() {
+  const providers = {};
+  for (const p of Object.values(PROVIDERS)) {
+    providers[p] = createProviderBucket();
+  }
+  return {
+    version: 1,
+    date: getTodayDateString(),
+    today: { success: 0, failed: 0 },
+    lifetime: { success: 0, failed: 0 },
+    providers
+  };
+}
+var memoryUsageStats = null;
+function getUsageStats(app) {
+  let stats = null;
+  const raw = app?.settings?.[USAGE_SETTING_KEY];
+  if (raw && typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw.trim());
+      if (parsed && typeof parsed === "object") {
+        stats = parsed;
+      }
+    } catch {
+      stats = null;
+    }
+  } else if (raw && typeof raw === "object") {
+    stats = raw;
+  }
+  if (!stats && memoryUsageStats) {
+    stats = JSON.parse(JSON.stringify(memoryUsageStats));
+  }
+  if (!stats) {
+    stats = getDefaultUsageStats();
+  }
+  if (!stats.providers || typeof stats.providers !== "object") {
+    stats.providers = {};
+  }
+  if (!stats.today) stats.today = { success: 0, failed: 0 };
+  if (!stats.lifetime) stats.lifetime = { success: 0, failed: 0 };
+  for (const p of Object.values(PROVIDERS)) {
+    if (!stats.providers[p]) {
+      stats.providers[p] = createProviderBucket();
+    } else {
+      if (!stats.providers[p].today) stats.providers[p].today = { success: 0, failed: 0 };
+      if (!stats.providers[p].lifetime) stats.providers[p].lifetime = { success: 0, failed: 0 };
+    }
+  }
+  const todayStr = getTodayDateString();
+  if (stats.date !== todayStr) {
+    stats.date = todayStr;
+    stats.today = { success: 0, failed: 0 };
+    for (const key of Object.keys(stats.providers)) {
+      stats.providers[key].today = { success: 0, failed: 0 };
+    }
+  }
+  memoryUsageStats = stats;
+  return stats;
+}
+async function recordUsage2(app, providerName, isSuccess) {
+  const stats = getUsageStats(app);
+  const targetProvider = providerName || PROVIDERS.OPENROUTER;
+  if (!stats.providers[targetProvider]) {
+    stats.providers[targetProvider] = createProviderBucket();
+  }
+  const resultKey = isSuccess ? "success" : "failed";
+  stats.today[resultKey] = (stats.today[resultKey] || 0) + 1;
+  stats.lifetime[resultKey] = (stats.lifetime[resultKey] || 0) + 1;
+  stats.providers[targetProvider].today[resultKey] = (stats.providers[targetProvider].today[resultKey] || 0) + 1;
+  stats.providers[targetProvider].lifetime[resultKey] = (stats.providers[targetProvider].lifetime[resultKey] || 0) + 1;
+  memoryUsageStats = stats;
+  const serialized = JSON.stringify(stats);
+  if (app?.settings) {
+    app.settings[USAGE_SETTING_KEY] = serialized;
+  }
+  if (typeof app?.setSetting === "function") {
+    try {
+      await app.setSetting(USAGE_SETTING_KEY, serialized);
+    } catch (err) {
+      console.warn("[GrammarReviewer] Failed to persist AI usage stats:", err);
+    }
+  }
+  return stats;
+}
+async function resetUsage(app, mode = "today") {
+  const stats = getUsageStats(app);
+  if (mode === "today") {
+    stats.today = { success: 0, failed: 0 };
+    for (const key of Object.keys(stats.providers)) {
+      stats.providers[key].today = { success: 0, failed: 0 };
+    }
+  } else if (mode === "all") {
+    stats.today = { success: 0, failed: 0 };
+    stats.lifetime = { success: 0, failed: 0 };
+    for (const key of Object.keys(stats.providers)) {
+      stats.providers[key].today = { success: 0, failed: 0 };
+      stats.providers[key].lifetime = { success: 0, failed: 0 };
+    }
+  }
+  memoryUsageStats = stats;
+  const serialized = JSON.stringify(stats);
+  if (app?.settings) {
+    app.settings[USAGE_SETTING_KEY] = serialized;
+  }
+  if (typeof app?.setSetting === "function") {
+    try {
+      await app.setSetting(USAGE_SETTING_KEY, serialized);
+    } catch (err) {
+      console.warn("[GrammarReviewer] Failed to persist reset AI usage stats:", err);
+    }
+  }
+  return stats;
+}
+
 // anp-23-grammar-reviewer/lib/features/reviewWorkflow.js
 var isReviewAllCancelled = false;
 function cancelReviewAll() {
@@ -1597,6 +1733,15 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
   const item = session.items[targetIdx];
   if (!item) {
     throw new Error(`Item at index ${targetIdx} does not exist.`);
+  }
+  if (!item.original || item.original.trim().length === 0) {
+    session.setSuggestion(targetIdx, item.original || "", {
+      category: "None",
+      confidence: 1,
+      explanation: "Blank chunk skipped"
+    });
+    item.status = "accepted";
+    return session;
   }
   const config = getProviderConfig(app);
   const targetProvider = session.provider || config.provider;
@@ -1623,6 +1768,7 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
       systemPrompt,
       model: session.model
     });
+    await recordUsage2(app, targetProvider, true);
     const parsed = parseAiResponse(aiOutput, item.original);
     session.setSuggestion(targetIdx, parsed.rewritten, {
       category: parsed.category,
@@ -1631,6 +1777,8 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
     });
     return session;
   } catch (err) {
+    await recordUsage2(app, targetProvider, false).catch(() => {
+    });
     item.status = prevStatus === "pending" ? "error" : prevStatus;
     throw err;
   }
@@ -1651,6 +1799,10 @@ async function handleReviewAll(app) {
     }
     const item = session.items[i];
     if (item.isInspectable && (item.status === "pending" || item.status === "error")) {
+      if (!item.original || item.original.trim().length === 0) {
+        item.status = "accepted";
+        continue;
+      }
       try {
         await handleRunReview(app, i);
         reviewedCount++;
@@ -3426,6 +3578,35 @@ kbd {
   font-size: 13.5px;
   color: var(--text-primary);
 }
+.gr-provider-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  vertical-align: middle;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+.dot-configured {
+  background: #10b981;
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+}
+.dot-missing {
+  background: #64748b;
+  opacity: 0.35;
+}
+.gr-badge-validated {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  font-size: 10px;
+  padding: 1.5px 6px;
+  border-radius: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
 .gr-badge-free {
   background: var(--accent-success-bg);
   color: var(--accent-success);
@@ -3861,8 +4042,9 @@ function renderSidebarPanel(session, config, metrics) {
       <div class="gr-progress-track">
         <div class="gr-progress-fill" style="width: ${metrics.percentComplete}%;"></div>
       </div>
-      <div class="gr-metrics-row" style="margin-top: 6px; display: flex; justify-content: space-between; font-size: 11px;">
+      <div class="gr-metrics-row" style="margin-top: 6px; display: flex; justify-content: space-between; font-size: 11px; flex-wrap: wrap; gap: 4px;">
         <span style="color: var(--accent-success); font-weight: 600;">\u2713 ${metrics.accepted} Accepted</span>
+        ${metrics.suggestionReady > 0 ? `<span style="color: var(--accent-primary); font-weight: 600;">\u25CF ${metrics.suggestionReady} Ready</span>` : ""}
         <span style="color: var(--accent-warning); font-weight: 600;">\u25CB ${pendingCount} Pending</span>
         <span style="color: var(--accent-danger); font-weight: 600;">\u2717 ${metrics.rejected} Rejected</span>
       </div>
@@ -4206,7 +4388,7 @@ function safeJsonEmbed(obj) {
   if (obj === null || obj === void 0) return "null";
   return JSON.stringify(obj).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 }
-function buildDashboardTemplate({ session, config, historyRecords = [], activeTab = "review", activeTheme = "midnight" }) {
+function buildDashboardTemplate({ session, config, historyRecords = [], activeTab = "review", activeTheme = "midnight", usageStats = null }) {
   const metrics = session ? session.getMetrics() : { total: 0, reviewed: 0, accepted: 0, rejected: 0, percentComplete: 0, pending: 0 };
   const currentItem = session?.items?.[session.currentIndex] || null;
   const serializedSession = safeJsonEmbed(session ? session.toJSON() : null);
@@ -4327,7 +4509,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
 
     <!-- Tab 3: Settings Workspace -->
     <div id="tab-view-settings" class="gr-tab-view ${activeTab === "settings" ? "active" : ""}">
-      ${renderSettingsWorkspace(config)}
+      ${renderSettingsWorkspace(config, usageStats)}
     </div>
 
   </div>
@@ -4340,7 +4522,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     const STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_SESSION_STATE";
     const THEME_STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_ACTIVE_THEME";
     const TAB_STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_ACTIVE_TAB";
-    const serverSession = ${serializedSession};
+    let serverSession = ${serializedSession};
 
     // Instant Theme Initialization
     let currentTheme = localStorage.getItem(THEME_STORAGE_KEY) || "${escapeHtml(activeTheme)}";
@@ -4661,6 +4843,11 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         return;
       }
 
+      if (serverSession) {
+        serverSession.promptPresetId = val;
+        serverSession.customPrompt = "";
+      }
+
       if (descBadge) {
         const desc = PRESET_DESCRIPTIONS[val] || "Refines grammar and prose.";
         descBadge.innerHTML = '\u{1F4A1} ' + desc;
@@ -4676,6 +4863,11 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       const select = document.getElementById("preset-style-select");
       const descBadge = document.getElementById("preset-description-badge");
       const customActions = document.getElementById("custom-prompt-actions");
+
+      if (serverSession) {
+        serverSession.promptPresetId = "grammar_spelling";
+        serverSession.customPrompt = "";
+      }
 
       if (select) select.value = "grammar_spelling";
       if (descBadge) {
@@ -4699,13 +4891,16 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         isLarge: true,
         allowEnlarge: true,
         placeholder: "e.g. Make concise, preserve bullet points, use active voice, sound friendly...",
-        onConfirm: (val) => {
-          if (val && val.trim().length > 0) {
-            const trimmed = val.trim();
+        onConfirm: (customText) => {
+          const trimmed = (customText || "").trim();
+          if (trimmed.length > 0) {
             const select = document.getElementById("preset-style-select");
             const descBadge = document.getElementById("preset-description-badge");
             const customActions = document.getElementById("custom-prompt-actions");
 
+            if (serverSession) {
+              serverSession.customPrompt = trimmed;
+            }
             if (select) select.value = "__custom__";
             if (descBadge) {
               descBadge.innerHTML = '\u{1F3AF} <em>Custom:</em> "' + trimmed.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '"';
@@ -4723,18 +4918,33 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
 
     // Re-Review with in-DOM reason picker modal
     function openReReviewDialog(index) {
+      const presetSelect = document.getElementById("preset-style-select");
+      let activePresetLabel = "Active Prompt Style";
+      if (presetSelect && presetSelect.selectedOptions && presetSelect.selectedOptions[0]) {
+        activePresetLabel = presetSelect.selectedOptions[0].text;
+      } else if (serverSession?.customPrompt) {
+        activePresetLabel = "Custom Prompt";
+      }
+
+      const dialogOptions = [
+        { id: "active_preset", label: "Apply Current Prompt Style (" + activePresetLabel + ")", prompt: "" },
+        ...RE_REVIEW_REASONS
+      ];
+
       showAppChoice({
         title: "Re-Review Item #" + (index + 1),
-        message: "Why would you like to re-review this section?",
-        options: RE_REVIEW_REASONS,
-        defaultSelected: "too_aggressive",
+        message: "Select guidance for re-reviewing this section:",
+        options: dialogOptions,
+        defaultSelected: "active_preset",
         onConfirm: (choiceId, customSub) => {
-          const selected = RE_REVIEW_REASONS.find(r => r.id === choiceId) || RE_REVIEW_REASONS[0];
-          let instruction = selected.prompt;
+          let instruction = "";
           if (choiceId === "custom" && customSub && customSub.trim().length > 0) {
             instruction = customSub.trim();
+          } else if (choiceId !== "active_preset") {
+            const selected = RE_REVIEW_REASONS.find(r => r.id === choiceId);
+            if (selected) instruction = selected.prompt;
           }
-          setTopLoading(true, "Re-reviewing Item #" + (index + 1) + " (" + selected.label + ")...");
+          setTopLoading(true, "Re-reviewing Item #" + (index + 1) + "...");
           sendAction("reReviewItem", index, instruction);
         }
       });
@@ -5100,13 +5310,198 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
           if (previewBanner) {
             previewBanner.innerHTML = '<span style="color: var(--accent-warning);">\u26A0\uFE0F No key saved \u2014 enter key below</span>';
           }
+          const slug = currentProvider?.toLowerCase().replace(/[^a-z0-9]/g, "-");
+          const dot = document.getElementById("provider-dot-" + slug);
+          if (dot) {
+            dot.className = "gr-provider-dot dot-missing";
+            dot.title = "No API key configured";
+          }
+          const valBadge = document.getElementById("provider-val-badge-" + slug);
+          if (valBadge) valBadge.style.display = "none";
+          const banner = document.getElementById("api-test-status-banner");
+          if (banner) banner.style.display = "none";
         }
       });
     }
 
+    function escapeHtml(str) {
+      if (str === null || str === undefined) return "";
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    let activeTestAbortController = null;
+
+    function cancelActiveProviderTest() {
+      if (activeTestAbortController) {
+        activeTestAbortController.abort();
+        activeTestAbortController = null;
+      }
+      const banner = document.getElementById("api-test-status-banner");
+      if (banner) {
+        banner.style.display = "flex";
+        banner.style.background = "var(--bg-card)";
+        banner.style.border = "1px solid var(--border-color)";
+        banner.style.color = "var(--text-secondary)";
+        banner.innerHTML = '<span>\u{1F6D1}</span><span>API Test was cancelled.</span>';
+      }
+      const testBtn = document.getElementById("test-api-btn");
+      const testOllamaBtn = document.getElementById("test-ollama-btn");
+      if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.innerHTML = '<span>\u26A1</span><span>Test API</span>';
+      }
+      if (testOllamaBtn) {
+        testOllamaBtn.disabled = false;
+        testOllamaBtn.innerHTML = '<span>\u26A1</span><span>Test Ollama</span>';
+      }
+    }
+
+    function onApiKeyInput() {
+      const providerInput = document.getElementById("settings-provider");
+      const keyInput = document.getElementById("settings-api-key");
+      const curProv = providerInput?.value || DEFAULT_PROVIDER;
+      const curKey = keyInput?.value || "";
+      ALL_SAVED_KEYS[curProv] = curKey;
+
+      const slug = curProv.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      const dot = document.getElementById("provider-dot-" + slug);
+      if (dot) {
+        if (curKey.trim().length > 0) {
+          dot.className = "gr-provider-dot dot-configured";
+          dot.title = "API Key is configured";
+        } else {
+          dot.className = "gr-provider-dot dot-missing";
+          dot.title = "No API key configured";
+        }
+      }
+      const banner = document.getElementById("api-test-status-banner");
+      if (banner) banner.style.display = "none";
+    }
+
+    async function testActiveProviderConnection() {
+      const provider = document.getElementById("settings-provider")?.value || DEFAULT_PROVIDER;
+      const apiKey = document.getElementById("settings-api-key")?.value || "";
+      const modelSelect = document.getElementById("settings-model-select")?.value;
+      const customInput = document.getElementById("settings-model")?.value;
+      const baseUrl = document.getElementById("settings-base-url")?.value || "";
+
+      let model = "";
+      if (modelSelect === "__custom__") {
+        model = (customInput || "").trim();
+      } else if (modelSelect) {
+        model = modelSelect.trim();
+      }
+
+      const testBtn = document.getElementById("test-api-btn");
+      const testOllamaBtn = document.getElementById("test-ollama-btn");
+      const banner = document.getElementById("api-test-status-banner");
+      const slug = provider.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      const valBadge = document.getElementById("provider-val-badge-" + slug);
+      const dot = document.getElementById("provider-dot-" + slug);
+
+      if (testBtn) {
+        testBtn.disabled = true;
+        testBtn.innerHTML = '<span>\u23F3</span><span>Testing...</span>';
+      }
+      if (testOllamaBtn) {
+        testOllamaBtn.disabled = true;
+        testOllamaBtn.innerHTML = '<span>\u23F3</span><span>Testing...</span>';
+      }
+      if (banner) {
+        banner.style.display = "flex";
+        banner.style.background = "var(--bg-card)";
+        banner.style.border = "1px solid var(--border-color)";
+        banner.style.color = "var(--text-primary)";
+        banner.innerHTML = '<div style="display: flex; align-items: center; justify-content: space-between; width: 100%; gap: 10px;">' +
+          '<div style="display: flex; align-items: center; gap: 8px;"><span>\u23F3</span><span>Testing connection to <strong>' + escapeHtml(provider) + '</strong> (max 30s)...</span></div>' +
+          '<button type="button" class="gr-btn btn-danger" style="padding: 4px 10px; font-size: 11px; white-space: nowrap;" onclick="cancelActiveProviderTest()">\u{1F6D1} Cancel</button>' +
+          '</div>';
+      }
+
+      activeTestAbortController = new AbortController();
+      const signal = activeTestAbortController.signal;
+
+      const timeoutPromise = new Promise((_, reject) => {
+        const timer = setTimeout(() => {
+          reject(new Error("Connection timed out after 30 seconds. Please check your network or API endpoint."));
+        }, 30000);
+        signal.addEventListener("abort", () => {
+          clearTimeout(timer);
+          reject(new Error("Test was cancelled by user."));
+        });
+      });
+
+      try {
+        const res = await Promise.race([
+          sendAction("testProviderConnection", {
+            provider,
+            apiKey,
+            model,
+            baseUrl
+          }),
+          timeoutPromise
+        ]);
+
+        if (res && res.ok) {
+          if (banner) {
+            banner.style.display = "flex";
+            banner.style.background = "rgba(16, 185, 129, 0.12)";
+            banner.style.border = "1px solid rgba(16, 185, 129, 0.35)";
+            banner.style.color = "var(--accent-success)";
+            banner.innerHTML = '<span>\u2705</span><span><strong>Connection Verified!</strong> Response received in <strong>' + res.latencyMs + 'ms</strong> via <code>' + escapeHtml(res.model || "default") + '</code>.</span>';
+          }
+          if (valBadge) {
+            valBadge.style.display = "inline-flex";
+            valBadge.innerText = "\u26A1 Validated (" + res.latencyMs + "ms)";
+          }
+          if (dot) {
+            dot.className = "gr-provider-dot dot-configured";
+            dot.title = "API Key is configured & verified (" + res.latencyMs + "ms)";
+          }
+        } else {
+          const errMsg = res?.error || "Unknown connection error";
+          if (banner) {
+            banner.style.display = "flex";
+            banner.style.background = "rgba(239, 68, 68, 0.12)";
+            banner.style.border = "1px solid rgba(239, 68, 68, 0.35)";
+            banner.style.color = "var(--accent-danger)";
+            banner.innerHTML = '<span>\u274C</span><span><strong>Connection Failed:</strong> ' + escapeHtml(errMsg) + '</span>';
+          }
+          if (valBadge) {
+            valBadge.style.display = "none";
+          }
+        }
+      } catch (err) {
+        if (banner) {
+          banner.style.display = "flex";
+          const isCancel = err?.message?.includes("cancelled");
+          banner.style.background = isCancel ? "var(--bg-card)" : "rgba(239, 68, 68, 0.12)";
+          banner.style.border = isCancel ? "1px solid var(--border-color)" : "1px solid rgba(239, 68, 68, 0.35)";
+          banner.style.color = isCancel ? "var(--text-secondary)" : "var(--accent-danger)";
+          banner.innerHTML = '<span>' + (isCancel ? '\u{1F6D1}' : '\u274C') + '</span><span><strong>' + (isCancel ? 'Test Cancelled' : 'Connection Error') + ':</strong> ' + escapeHtml(err?.message || String(err)) + '</span>';
+        }
+      } finally {
+        activeTestAbortController = null;
+        if (testBtn) {
+          testBtn.disabled = false;
+          testBtn.innerHTML = '<span>\u26A1</span><span>Test API</span>';
+        }
+        if (testOllamaBtn) {
+          testOllamaBtn.disabled = false;
+          testOllamaBtn.innerHTML = '<span>\u26A1</span><span>Test Ollama</span>';
+        }
+      }
+    }
 
     // Instant Settings Provider Selection
     function selectProviderCard(providerKey) {
+      const banner = document.getElementById("api-test-status-banner");
+      if (banner) banner.style.display = "none";
       const providerInput = document.getElementById("settings-provider");
       if (providerInput) providerInput.value = providerKey;
 
@@ -5211,6 +5606,21 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         apiKey,
         customModel,
         customBaseUrl
+      });
+    }
+
+    function handleResetUsage(mode) {
+      const isToday = mode === "today";
+      showAppConfirm({
+        title: isToday ? "Reset Today's AI Usage?" : "Reset All AI Usage Statistics?",
+        message: isToday 
+          ? "Are you sure you want to reset today's request counters to 0 across all providers?"
+          : "Are you sure you want to completely erase ALL lifetime and daily AI usage statistics?",
+        confirmLabel: isToday ? "Reset Today" : "Reset All",
+        isDanger: !isToday,
+        onConfirm: () => {
+          sendAction("resetUsage", mode);
+        }
       });
     }
   </script>
@@ -5332,7 +5742,7 @@ function renderHistoryWorkspace(historyRecords) {
     </div>
   `;
 }
-function renderSettingsWorkspace(config) {
+function renderSettingsWorkspace(config, usageStats = null) {
   const activeProvider = config.provider || PROVIDERS.OPENROUTER;
   const currentKey = config.apiKey || config.allKeys?.[activeProvider] || "";
   const docUrl = PROVIDER_DOCS[activeProvider] || "https://openrouter.ai/keys";
@@ -5350,11 +5760,19 @@ function renderSettingsWorkspace(config) {
   const cardsHtml = providersInfo.map((p) => {
     const isSelected = p.key === activeProvider;
     const badgeClass = p.isFree ? "gr-badge-free" : "gr-badge-paid";
+    const hasKey = p.key === PROVIDERS.OLLAMA ? true : Boolean(config.allKeys?.[p.key] && config.allKeys[p.key].trim().length > 0);
+    const pSlug = p.key.toLowerCase().replace(/[^a-z0-9]/g, "-");
     return `
       <div class="gr-provider-card ${isSelected ? "active" : ""}" data-key="${escapeHtml(p.key)}" onclick="selectProviderCard('${escapeHtml(p.key)}')">
         <div class="gr-provider-card-header">
-          <span class="gr-provider-title">${escapeHtml(p.title)}</span>
-          <span class="${badgeClass}">${escapeHtml(p.badge)}</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="gr-provider-title">${escapeHtml(p.title)}</span>
+            <span id="provider-dot-${pSlug}" class="gr-provider-dot ${hasKey ? "dot-configured" : "dot-missing"}" title="${hasKey ? "API Key is configured" : "No API key configured"}"></span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <span id="provider-val-badge-${pSlug}" class="gr-badge-validated" style="display: none;">\u26A1 Validated</span>
+            <span class="${badgeClass}">${escapeHtml(p.badge)}</span>
+          </div>
         </div>
         <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.35;">${escapeHtml(p.desc)}</p>
       </div>
@@ -5366,9 +5784,129 @@ function renderSettingsWorkspace(config) {
     const isSelected = m.value === activeSavedModel;
     return `<option value="${escapeHtml(m.value)}" ${isSelected ? "selected" : ""}>${escapeHtml(m.label)}</option>`;
   }).join("") + `<option value="__custom__" ${isCustomModelActive ? "selected" : ""}>\u2699\uFE0F Custom Model Override...</option>`;
+  const todaySuccess = usageStats?.today?.success || 0;
+  const todayFailed = usageStats?.today?.failed || 0;
+  const todayTotal = todaySuccess + todayFailed;
+  const lifeSuccess = usageStats?.lifetime?.success || 0;
+  const lifeFailed = usageStats?.lifetime?.failed || 0;
+  const lifeTotal = lifeSuccess + lifeFailed;
+  const currentDate = usageStats?.date || (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const PROVIDER_LIMIT_LABELS = {
+    [PROVIDERS.OPENROUTER]: "50 req/day (Free tier)",
+    [PROVIDERS.GROQ]: "1,000 req/day (Free tier)",
+    [PROVIDERS.GEMINI]: "Dynamic / AI Studio",
+    [PROVIDERS.MISTRAL]: "Dynamic / Free tier",
+    [PROVIDERS.OLLAMA]: "Unlimited / Local or Cloud",
+    [PROVIDERS.DEEPSEEK]: "Pay-as-you-go",
+    [PROVIDERS.OPENAI]: "Pay-as-you-go",
+    [PROVIDERS.ANTHROPIC]: "Pay-as-you-go"
+  };
+  const providerRows = Object.values(PROVIDERS).map((p) => {
+    const pUsage = usageStats?.providers?.[p] || { today: { success: 0, failed: 0 }, lifetime: { success: 0, failed: 0 } };
+    const pTodaySuccess = pUsage.today?.success || 0;
+    const pTodayFailed = pUsage.today?.failed || 0;
+    const pTodayTotal = pTodaySuccess + pTodayFailed;
+    const pLifeSuccess = pUsage.lifetime?.success || 0;
+    const pLifeFailed = pUsage.lifetime?.failed || 0;
+    const pLifeTotal = pLifeSuccess + pLifeFailed;
+    const limitLabel = PROVIDER_LIMIT_LABELS[p] || "Dynamic";
+    const isCurrentActive = p === activeProvider;
+    return `
+      <tr style="border-bottom: 1px solid var(--border-color); ${isCurrentActive ? "background: rgba(59, 130, 246, 0.08);" : ""}">
+        <td style="padding: 7px 10px; font-weight: ${isCurrentActive ? "600" : "400"}; color: ${isCurrentActive ? "var(--accent-primary)" : "var(--text-primary)"};">
+          ${escapeHtml(p)} ${isCurrentActive ? '<span style="font-size: 10px; font-weight: 700; opacity: 0.85;">(ACTIVE)</span>' : ""}
+        </td>
+        <td style="padding: 7px 10px; color: var(--text-secondary);">${escapeHtml(limitLabel)}</td>
+        <td style="padding: 7px 10px;">
+          <strong>${pTodayTotal}</strong> 
+          <span style="color: var(--accent-success); font-size: 11px;">(${pTodaySuccess} ok</span>${pTodayFailed > 0 ? `<span style="color: var(--accent-danger); font-size: 11px;">, ${pTodayFailed} err</span>` : ""}<span style="color: var(--accent-success); font-size: 11px;">)</span>
+        </td>
+        <td style="padding: 7px 10px;">
+          <strong>${pLifeTotal}</strong> 
+          <span style="color: var(--accent-success); font-size: 11px;">(${pLifeSuccess} ok</span>${pLifeFailed > 0 ? `<span style="color: var(--accent-danger); font-size: 11px;">, ${pLifeFailed} err</span>` : ""}<span style="color: var(--accent-success); font-size: 11px;">)</span>
+        </td>
+      </tr>
+    `;
+  }).join("");
   return `
     <div style="display: flex; flex-direction: column; gap: 16px; width: 100%;">
       
+      <!-- AI Usage Statistics & Provider Breakdown (Top Section) -->
+      <div>
+        <h2 style="font-size: 15px; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; gap: 8px;">
+          <span>\u{1F4CA}</span>
+          <span>AI Usage Statistics & Provider Quotas</span>
+        </h2>
+        <details id="settings-usage-collapsible" style="background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border-color); overflow: hidden;">
+          <summary style="padding: 12px 14px; font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none;">
+            <span style="display: flex; align-items: center; gap: 8px;">
+              <span>\u{1F4C8}</span>
+              <span>Daily & Lifetime Telemetry Breakdown</span>
+            </span>
+            <span style="font-size: 11px; font-weight: 500; color: var(--text-secondary); background: var(--bg-surface); padding: 2px 8px; border-radius: 12px; border: 1px solid var(--border-color);">
+              Today: ${todayTotal} reqs (${todaySuccess} ok / ${todayFailed} err)
+            </span>
+          </summary>
+
+          <div style="padding: 14px; border-top: 1px solid var(--border-color); font-size: 12px; display: flex; flex-direction: column; gap: 14px;">
+            
+            <!-- Overview Grid -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px;">
+              <div style="background: var(--bg-surface); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                <div style="font-size: 10.5px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Today's Requests</div>
+                <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">${todayTotal}</div>
+                <div style="font-size: 11px; color: var(--accent-success); margin-top: 2px;">${todaySuccess} ok${todayFailed > 0 ? `<span style="color: var(--accent-danger);">, ${todayFailed} err</span>` : ""}</div>
+              </div>
+
+              <div style="background: var(--bg-surface); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                <div style="font-size: 10.5px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Lifetime Requests</div>
+                <div style="font-size: 18px; font-weight: 700; color: var(--text-primary); margin-top: 2px;">${lifeTotal}</div>
+                <div style="font-size: 11px; color: var(--accent-success); margin-top: 2px;">${lifeSuccess} ok${lifeFailed > 0 ? `<span style="color: var(--accent-danger);">, ${lifeFailed} err</span>` : ""}</div>
+              </div>
+
+              <div style="background: var(--bg-surface); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+                <div style="font-size: 10.5px; color: var(--text-secondary); text-transform: uppercase; font-weight: 600;">Tracking Date</div>
+                <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 4px;">${escapeHtml(currentDate)}</div>
+                <div style="font-size: 10.5px; color: var(--text-secondary); margin-top: 2px;">Daily count resets at 00:00</div>
+              </div>
+            </div>
+
+            <!-- Provider Table -->
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 11.5px; text-align: left;">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border-color); color: var(--text-secondary);">
+                    <th style="padding: 6px 10px;">Provider</th>
+                    <th style="padding: 6px 10px;">Known Limit Reference</th>
+                    <th style="padding: 6px 10px;">Today (Total & Ok)</th>
+                    <th style="padding: 6px 10px;">Lifetime (Total & Ok)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${providerRows}
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Explanatory note -->
+            <div style="font-size: 11px; color: var(--text-secondary); line-height: 1.45; background: rgba(0,0,0,0.12); padding: 8px 10px; border-radius: 4px;">
+              \u{1F4A1} <strong>Free Quota Info:</strong> OpenRouter provides ~50 free requests/day; Groq provides up to 1,000 req/day. Gemini and Mistral limits vary dynamically by model & tier. Usage is stored safely in your Amplenote plugin settings.
+            </div>
+
+            <!-- Reset Actions -->
+            <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
+              <button type="button" class="gr-btn btn-secondary" style="padding: 6px 12px; font-size: 11.5px;" onclick="handleResetUsage('today')" title="Reset today's request counters to zero">
+                \u{1F504} Reset Today's Stats
+              </button>
+              <button type="button" class="gr-btn btn-danger" style="padding: 6px 12px; font-size: 11.5px;" onclick="handleResetUsage('all')" title="Reset all lifetime and daily usage statistics">
+                \u{1F5D1}\uFE0F Reset All Statistics
+              </button>
+            </div>
+
+          </div>
+        </details>
+      </div>
+
       <!-- Providers Grid -->
       <div>
         <h2 style="font-size: 15px; margin-bottom: 10px; color: var(--text-primary);">Select AI Provider</h2>
@@ -5396,20 +5934,31 @@ function renderSettingsWorkspace(config) {
           </div>
 
           <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-            <input type="password" id="settings-api-key" class="gr-input" style="flex: 1; min-width: 0; padding: 8px 12px;" placeholder="Paste new or updated API Key" value="${escapeHtml(currentKey)}">
+            <input type="password" id="settings-api-key" class="gr-input" style="flex: 1; min-width: 0; padding: 8px 12px;" placeholder="Paste new or updated API Key" value="${escapeHtml(currentKey)}" oninput="onApiKeyInput()">
             <button type="button" id="toggle-key-btn" class="gr-btn btn-secondary" style="padding: 8px 14px; font-size: 12px; white-space: nowrap;" onclick="toggleApiKeyVisibility()">
               \u{1F441}\uFE0F Show
+            </button>
+            <button type="button" id="test-api-btn" class="gr-btn btn-secondary" style="padding: 8px 14px; font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 4px;" onclick="testActiveProviderConnection()" title="Test API key validity and ping latency">
+              <span>\u26A1</span>
+              <span>Test API</span>
             </button>
             <button type="button" class="gr-btn btn-danger" style="padding: 8px 14px; font-size: 12px; white-space: nowrap;" title="Clear and delete saved key" onclick="clearActiveApiKey()">
               \u{1F5D1}\uFE0F Clear
             </button>
           </div>
           <span class="gr-form-help">Keys are securely stored in your Amplenote plugin settings.</span>
+          <div id="api-test-status-banner" style="display: none; font-size: 12px; padding: 10px 12px; border-radius: var(--radius-sm); align-items: center; gap: 8px; line-height: 1.45;"></div>
         </div>
 
         <div id="settings-base-url-group" class="gr-form-group" style="display: ${activeProvider.includes("Ollama") ? "flex" : "none"}; flex-direction: column; gap: 8px;">
           <label class="gr-form-label" for="settings-base-url">Local Ollama Base URL</label>
-          <input type="text" id="settings-base-url" class="gr-input" style="width: 100%; padding: 8px 12px;" placeholder="http://localhost:11434/v1" value="${escapeHtml(config.customBaseUrl || "http://localhost:11434/v1")}">
+          <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+            <input type="text" id="settings-base-url" class="gr-input" style="flex: 1; min-width: 0; padding: 8px 12px;" placeholder="http://localhost:11434/v1" value="${escapeHtml(config.customBaseUrl || "http://localhost:11434/v1")}">
+            <button type="button" id="test-ollama-btn" class="gr-btn btn-secondary" style="padding: 8px 14px; font-size: 12px; white-space: nowrap; display: flex; align-items: center; gap: 4px;" onclick="testActiveProviderConnection()" title="Test Ollama connection and ping latency">
+              <span>\u26A1</span>
+              <span>Test Ollama</span>
+            </button>
+          </div>
           <span class="gr-form-help">Ensure Ollama is running with <code>OLLAMA_ORIGINS="*"</code> to allow web browser connection.</span>
         </div>
 
@@ -5483,17 +6032,62 @@ var plugin = {
       await launchReviewer(app, noteUUID);
     }
   },
-  /**
-   * Dispatches events from the embed iframe UI.
-   * @param {object} app
-   * @param  {...any} args
-   */
+  // Handle all client-side UI actions triggered via window.callAmplenotePlugin
   async onEmbedCall(app, ...args) {
     const action = args[0];
     const session = getActiveSession();
+    let requiresReRender = false;
     try {
-      let requiresReRender = false;
       switch (action) {
+        case "testProviderConnection": {
+          const testPayload = args[1] || {};
+          const testProv = testPayload.provider || DEFAULT_PROVIDER;
+          const testKey = testPayload.apiKey !== void 0 && testPayload.apiKey !== null ? testPayload.apiKey : app.settings?.[`${testProv} API Key`] || "";
+          const testBaseUrl = testPayload.baseUrl || (testProv === PROVIDERS.OLLAMA ? app.settings?.["Ollama Base URL"] || "http://localhost:11434/v1" : "");
+          const testModel = testPayload.model && testPayload.model.trim().length > 0 ? testPayload.model.trim() : DEFAULT_MODELS[testProv];
+          if (testProv !== PROVIDERS.OLLAMA && (!testKey || !testKey.trim())) {
+            return { ok: false, error: `No API key provided for ${testProv}. Please enter an API key to test.` };
+          }
+          try {
+            const providerInstance = createProviderInstance({
+              provider: testProv,
+              apiKey: testKey ? testKey.trim() : "",
+              baseUrl: testBaseUrl ? testBaseUrl.trim() : "",
+              defaultModel: testModel
+            });
+            const t0 = Date.now();
+            const response = await providerInstance.complete({
+              prompt: "Reply with the single word: OK",
+              systemPrompt: "You are an API diagnostic health checker. Reply only with OK.",
+              model: testModel
+            });
+            const latencyMs = Date.now() - t0;
+            try {
+              await recordUsage(app, testProv, true);
+            } catch (uErr) {
+              console.warn("[GrammarReviewer] Could not record usage for test:", uErr);
+            }
+            return {
+              ok: true,
+              latencyMs,
+              provider: testProv,
+              model: testModel,
+              sample: (typeof response === "string" ? response : JSON.stringify(response)).slice(0, 40)
+            };
+          } catch (err) {
+            console.warn("[GrammarReviewer] testProviderConnection failed:", err);
+            try {
+              await recordUsage(app, testProv, false);
+            } catch (uErr) {
+              console.warn("[GrammarReviewer] Could not record failed usage for test:", uErr);
+            }
+            return {
+              ok: false,
+              provider: testProv,
+              error: err?.message || String(err)
+            };
+          }
+        }
         case "selectNote":
           await launchReviewer(app, null, true);
           break;
@@ -5726,6 +6320,17 @@ Companion report created: ${res.changesNoteUUID}` : `Changes successfully saved 
           }
           requiresReRender = false;
           break;
+        case "resetUsage": {
+          const mode = args[1] || "today";
+          await resetUsage(app, mode);
+          if (app.context && typeof app.context.renderEmbed === "function") {
+            await app.context.renderEmbed();
+          } else if (typeof app.renderEmbed === "function") {
+            await app.renderEmbed();
+          }
+          requiresReRender = false;
+          break;
+        }
         default:
           console.warn("[GrammarReviewer] Unhandled action:", action);
       }
@@ -5762,6 +6367,7 @@ Companion report created: ${res.changesNoteUUID}` : `Changes successfully saved 
   async renderEmbed(app) {
     const session = getActiveSession();
     const config = getProviderConfig(app);
+    const usageStats = getUsageStats(app);
     let historyRecords = [];
     if (activeTabState === "history") {
       historyRecords = await loadHistoryRecords(app);
@@ -5770,7 +6376,8 @@ Companion report created: ${res.changesNoteUUID}` : `Changes successfully saved 
       session,
       config,
       historyRecords,
-      activeTab: activeTabState
+      activeTab: activeTabState,
+      usageStats
     });
   }
 };

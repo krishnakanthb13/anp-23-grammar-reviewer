@@ -7,13 +7,14 @@
 
 import { getActiveSession, setActiveSession, clearActiveSession } from "./lib/data/store.js";
 import { ReviewSession } from "./lib/engine/reviewSession.js";
-import { getProviderConfig } from "./lib/providers/providerRegistry.js";
+import { getProviderConfig, createProviderInstance } from "./lib/providers/providerRegistry.js";
 import { launchReviewer } from "./lib/features/launcher.js";
 import { handleRunReview, handleReviewAll, handleSetGranularity, cancelReviewAll } from "./lib/features/reviewWorkflow.js";
 import { handleSaveAndCommit } from "./lib/features/saveHandler.js";
 import { loadHistoryRecords } from "./lib/features/historyViewer.js";
 import { buildDashboardTemplate, renderReviewWorkspace } from "./lib/ui/dashboardTemplate.js";
-import { DEFAULT_MODELS, DEFAULT_PROVIDER } from "./lib/constants.js";
+import { DEFAULT_MODELS, DEFAULT_PROVIDER, PROVIDERS } from "./lib/constants.js";
+import { getUsageStats, resetUsage } from "./lib/data/usageTracker.js";
 
 let activeTabState = "review";
 
@@ -51,19 +52,72 @@ const plugin = {
     }
   },
 
-  /**
-   * Dispatches events from the embed iframe UI.
-   * @param {object} app
-   * @param  {...any} args
-   */
+  // Handle all client-side UI actions triggered via window.callAmplenotePlugin
   async onEmbedCall(app, ...args) {
     const action = args[0];
     const session = getActiveSession();
+    let requiresReRender = false;
 
     try {
-      let requiresReRender = false;
-
       switch (action) {
+        case "testProviderConnection": {
+          const testPayload = args[1] || {};
+          const testProv = testPayload.provider || DEFAULT_PROVIDER;
+          const testKey = (testPayload.apiKey !== undefined && testPayload.apiKey !== null)
+            ? testPayload.apiKey
+            : (app.settings?.[`${testProv} API Key`] || "");
+          const testBaseUrl = testPayload.baseUrl || (testProv === PROVIDERS.OLLAMA ? (app.settings?.["Ollama Base URL"] || "http://localhost:11434/v1") : "");
+          const testModel = (testPayload.model && testPayload.model.trim().length > 0)
+            ? testPayload.model.trim()
+            : DEFAULT_MODELS[testProv];
+
+          if (testProv !== PROVIDERS.OLLAMA && (!testKey || !testKey.trim())) {
+            return { ok: false, error: `No API key provided for ${testProv}. Please enter an API key to test.` };
+          }
+
+          try {
+            const providerInstance = createProviderInstance({
+              provider: testProv,
+              apiKey: testKey ? testKey.trim() : "",
+              baseUrl: testBaseUrl ? testBaseUrl.trim() : "",
+              defaultModel: testModel
+            });
+
+            const t0 = Date.now();
+            const response = await providerInstance.complete({
+              prompt: "Reply with the single word: OK",
+              systemPrompt: "You are an API diagnostic health checker. Reply only with OK.",
+              model: testModel
+            });
+
+            const latencyMs = Date.now() - t0;
+            try {
+              await recordUsage(app, testProv, true);
+            } catch (uErr) {
+              console.warn("[GrammarReviewer] Could not record usage for test:", uErr);
+            }
+
+            return {
+              ok: true,
+              latencyMs,
+              provider: testProv,
+              model: testModel,
+              sample: (typeof response === "string" ? response : JSON.stringify(response)).slice(0, 40)
+            };
+          } catch (err) {
+            console.warn("[GrammarReviewer] testProviderConnection failed:", err);
+            try {
+              await recordUsage(app, testProv, false);
+            } catch (uErr) {
+              console.warn("[GrammarReviewer] Could not record failed usage for test:", uErr);
+            }
+            return {
+              ok: false,
+              provider: testProv,
+              error: err?.message || String(err)
+            };
+          }
+        }
         case "selectNote":
           await launchReviewer(app, null, true);
           break;
@@ -330,6 +384,18 @@ const plugin = {
           requiresReRender = false;
           break;
 
+        case "resetUsage": {
+          const mode = args[1] || "today";
+          await resetUsage(app, mode);
+          if (app.context && typeof app.context.renderEmbed === "function") {
+            await app.context.renderEmbed();
+          } else if (typeof app.renderEmbed === "function") {
+            await app.renderEmbed();
+          }
+          requiresReRender = false;
+          break;
+        }
+
 
         default:
           console.warn("[GrammarReviewer] Unhandled action:", action);
@@ -372,6 +438,7 @@ const plugin = {
   async renderEmbed(app) {
     const session = getActiveSession();
     const config = getProviderConfig(app);
+    const usageStats = getUsageStats(app);
     let historyRecords = [];
 
     if (activeTabState === "history") {
@@ -382,7 +449,8 @@ const plugin = {
       session,
       config,
       historyRecords,
-      activeTab: activeTabState
+      activeTab: activeTabState,
+      usageStats
     });
   }
 };

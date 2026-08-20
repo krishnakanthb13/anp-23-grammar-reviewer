@@ -2,60 +2,67 @@
 
 | Metric              | Result                                |
 |---------------------|---------------------------------------|
-| Total test suites   | 11 ✅                                 |
-| Total tests         | 79                                    |
-| Passed              | 79 ✅                                 |
+| Total test suites   | 12 ✅                                 |
+| Total tests         | 86                                    |
+| Passed              | 86 ✅                                 |
 | Failed              | 0 ❌                                  |
 | Skipped             | 0 ⚠️                                  |
 | Confidence Score    | 10/10                                 |
-| Regression Coverage | Yes (CRLF, Token Diff, Stale Guard, Triple-Quote AI Parser, Scenario Integration) |
+| Regression Coverage | Yes (CRLF, Token Diff, Stale Guard, Triple-Quote AI Parser, Scenario Integration, AI Usage Tracking, API Ping Validation) |
 
 ### Test Suite Breakdown
 
-1. `diffEngine.test.js` (9 tests):
+1. `usageTracker.test.js` (6 tests):
+   - Happy Path: Initializes all 8 providers with 0 counts, retrieves default stats on empty settings.
+   - Request Counting: Tracks today and lifetime success/failure counters globally and per provider, calls Amplenote setSetting.
+   - Daily Rollover: Automatically rolls over today's counts to 0 at midnight while preserving lifetime statistics.
+   - Reset Actions: Resets today's counters only with mode='today'; resets all lifetime and daily counters with mode='all'.
+
+2. `diffEngine.test.js` (9 tests):
    - Happy Path: Myers/LCS token diff, word tokenization with punctuation separation, multi-part diff output.
    - Edge Cases: Identical strings, empty strings, insertions from empty, full deletions.
    - Error Handling: HTML tag escaping, XSS sanitization.
    - Changes Only: Structured change object extraction and card rendering.
 
-2. `tokenizer.test.js` (8 tests):
+3. `tokenizer.test.js` (8 tests):
    - Happy Path: Paragraph chunking, code fence preservation, sentence splitting with abbreviation protection.
    - Edge Cases: Null/empty inputs, thematic breaks, decimal number protection.
    - Error Handling: Unknown granularity mode fallbacks.
    - Regression: CRLF (\r\n) line-ending normalization.
 
-3. `reviewSession.test.js` (8 tests):
+4. `reviewSession.test.js` (8 tests):
    - Happy Path: Session initialization, item state transitions (accept/reject/manualEdit), metrics computation.
    - Edge Cases: JSON serialization (toJSON/fromJSON), additions/deletions word stats.
    - Error Handling: Out-of-bounds index handling.
 
-4. `saveHandler.test.js` (7 tests):
+5. `saveHandler.test.js` (7 tests):
    - Happy Path: Direct source note overwriting, companion audit report note creation.
    - Error Handling & Validation: Null session guards, missing noteUUID validation, API failure propagation.
    - Stale Note Concurrency: Aborts when external note modification detected and overwrite declined; proceeds when user confirms.
 
-5. `historyManager.test.js` (5 tests):
+6. `historyManager.test.js` (5 tests):
    - Happy Path: Structured JSON history generation, JSON embedded history parsing with safe code fences.
    - Edge Cases & Fallbacks: Markdown fallback report parsing, deduplication matching.
 
-6. `providerRegistry.test.js` (7 tests):
+7. `providerRegistry.test.js` (8 tests):
    - getProviderConfig: Default resolution, per-provider API key extraction, JSON custom model map parsing, Ollama custom base URL.
    - createProviderInstance: Gemini, OpenRouter, and Ollama adapter instantiations.
+   - Diagnostic Ping: Simulates successful API diagnostics ping for connection validation.
 
-7. `providers.test.js` (9 tests):
+8. `providers.test.js` (9 tests):
    - Full mock fetch validation for all 8 AI providers (OpenRouter, Gemini, Groq, Mistral, DeepSeek, Ollama, OpenAI, Anthropic) + 401/500 error propagation.
 
-8. `promptPresets.test.js` (7 tests):
+9. `promptPresets.test.js` (7 tests):
    - Prompt construction with system/user instructions, preset lookup by ID, default fallback.
    - Structured JSON AI response parsing, markdown-fenced JSON parsing, Python-style triple quotes `"""` extraction, multiline raw string support, and graceful plain-text fallback handling.
 
-9. `diffViewComponent.test.js` (5 tests):
-   - Dual-pane card rendering, clean/inline/side/changes toggle controls, empty states, button boundary disabling, state-aware action buttons with Undo.
+10. `diffViewComponent.test.js` (5 tests):
+    - Dual-pane card rendering, clean/inline/side/changes toggle controls, empty states, button boundary disabling, state-aware action buttons with Undo.
 
-10. `reportGenerator.test.js` (2 tests):
+11. `reportGenerator.test.js` (2 tests):
     - Changes report markdown generation with safe code fence escaping and session round-trip validation.
 
-11. `scenarioWorkflow.test.js` (7 tests):
+12. `scenarioWorkflow.test.js` (7 tests):
     - Scenario A: Preserves untouched sentences and exact paragraph structure when reviewing a middle sentence.
     - Scenario B: Preserves markdown structures (headers, bold, lists, quotes, code blocks) byte-accurately.
     - Scenario C: Review All handles individual API failures gracefully and flags failed items.

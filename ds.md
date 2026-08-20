@@ -1,1041 +1,853 @@
-Yes — this is a **substantial improvement**, and the work has addressed most of the issues from the previous audit. But after checking the resulting bundle rather than just trusting the 66/66 test result, I would **not yet call ANP-23 fully release-ready**.
+- on a final note, free ai providers have a limit, check the web and tell me so that I can update it,
+- also tell me how to define those limits and is it possible to track the number of requests sent totally in the settings?
+- give me steps or guidance or all data so that I can proceed implementing it.
 
-There are a few important **second-pass integrity issues** still visible.
-
-## Current verdict
-
-| Area                          | Verdict                                    |
-| ----------------------------- | ------------------------------------------ |
-| Sentence/paragraph navigation | 🟢 Good                                    |
-| Diff UX                       | 🟢 Good                                    |
-| State-aware actions           | 🟢 Much better                             |
-| Teacher/editor UX             | 🟢 Good foundation                         |
-| Loading/progress UX           | 🟢 Implemented                             |
-| Cancellation                  | 🟡 Needs verification                      |
-| Review-All correctness        | 🔴 Needs another pass                      |
-| Save integrity                | 🔴 Critical regression/verification needed |
-| Granularity switching         | 🟠 State-loss risk                         |
-| AI structured explanations    | 🟠 Not actually implemented end-to-end     |
-| Tests                         | 🟢 66/66, but coverage needs expansion     |
-| Bundle                        | 🟢 Builds                                  |
-
-### The most important finding
-
-Your reported **"stale note overwrite guard" does not appear in the compiled bundle's `handleSaveAndCommit()`**.
-
-The current save implementation goes directly from:
-
-```js
-const finalContent = session.getReconstructedContent();
-```
-
-to:
-
-```js
-await app.replaceNoteContent({ uuid: noteUUID }, finalContent);
-```
-
-with no visible fresh `getNoteContent()` comparison in between. 
-
-That is exactly the kind of thing I would stop the release for.
+1. create a amplenote setting to store it as it will be safe
+2. inside setting page it is
+3. is active provider required? can we just have a section on the top or bottom, and keep it collapsable, let them see it on demand, give some info as well. and yes reset todays, all stats is a nice touch
 
 ---
 
-# 1. 🔴 Save integrity: stale-note guard needs verification/fix
+Absolutely. Here is the **full high-level progression from the start of this ANP-23 Grammar Reviewer thread**, including the audit, UX redesign, implementation, hardening, documentation, and the final AI-usage discussion.
 
-Your summary says:
+## 1. Initial audit & product/UX requirements
 
-> "Added concurrency verification in saveHandler.js before committing changes"
+We started by auditing the Grammar Reviewer for:
 
-But the compiled bundle currently shows:
+* Bugs and edge cases.
+* Data/integrity risks.
+* Review-flow problems.
+* UX quality and usability.
+* Availability/configuration of **Accept, Reject, Edit, Re-Review**.
+* Whether each action had a clear objective.
+* How a **Teacher / Editor** would ideally guide a user through reviewing text.
+* Additional AI-assisted review features that would make the process feel genuinely useful.
 
-```js
-const finalContent = session.getReconstructedContent();
-const noteUUID = session.noteUUID;
+The central product goal became:
 
-await app.replaceNoteContent({ uuid: noteUUID }, finalContent);
-```
-
-There is no fresh read/compare before replacement. 
-
-This means:
-
-```text
-Review starts
-     ↓
-User edits note elsewhere
-     ↓
-Reviewer still has old originalContent
-     ↓
-User clicks Save
-     ↓
-replaceNoteContent()
-     ↓
-Potential overwrite
-```
-
-### This needs to be fixed before release.
-
-The save sequence should be:
-
-```text
-session.originalContent
-        │
-        ├── compare ── current note content
-        │
-        ├── SAME ──→ save
-        │
-        └── DIFFERENT ──→ stop + conflict UI
-```
-
-And the comparison should happen **immediately before the write**, not only when the session starts.
+> Make AI review feel like a guided editorial/teaching workflow, rather than simply "AI rewrites my text."
 
 ---
 
-# 2. 🔴 Review All: cancellation/progress architecture needs another verification
+# 2. Paragraph/sentence navigation
 
-The compiled `handleReviewAll()` is still:
+Implemented finer-grained review navigation.
 
-```js
-for (...) {
-    if (...) {
-        try {
-            await handleRunReview(app, i);
-        }
-    }
-}
-```
+### Added:
 
-There is no cancellation check inside this loop. 
+* Paragraph-preserving sentence reconstruction.
+* Sentence-level review without destroying the original paragraph structure.
+* Tracking of:
 
-So although the UI may have a **Stop Review** button, the underlying operation must actually cooperate with cancellation.
+  * `parentParagraphId`
+  * `isLastInParagraph`
+* Improved reconstruction of reviewed content.
+* Preservation of Markdown structures and lists.
+* Better sentence splitting.
 
-You want:
+### Sentence tokenizer improvements
 
-```js
-for (...) {
-    if (session.operation.cancelRequested) break;
+Expanded protection against incorrect sentence splitting for:
 
-    ...
-}
-```
+* Honorifics.
+* Titles.
+* Academic degrees.
+* Time units.
+* Decimal numbers.
+* URLs.
+* Other abbreviation cases.
 
-and ideally:
-
-```js
-await handleRunReview(...)
-```
-
-itself should know whether its request was cancelled/stale.
-
-Otherwise you get the dangerous UX:
-
-> User clicks **Stop Review**
-
-but the API calls continue.
-
-### Required behavior
+This prevented things such as:
 
 ```text
-Reviewing 8 / 30
-
-[ Stop Review ]
-
-↓ click
-
-Stopping...
-↓
-Current request finishes/cancels
-↓
-No new requests started
-↓
-Stopped at 8 / 30
+Dr. Smith
+3.14
+example.com
 ```
 
-Not:
+from being incorrectly treated as sentence boundaries.
+
+---
+
+# 3. Review Navigator / Jump To
+
+Added a dedicated review-navigation toolbar.
+
+### Added:
+
+* **Jump To** selector.
+* Status indicators for review items:
+
+  * ✓ Accepted
+  * ✕ Rejected
+  * ✎ Edited
+  * ● Ready
+  * ○ Pending
+* **Prev Pending**
+* **Next Pending**
+
+This allows users to move directly between items rather than being forced through the document sequentially.
+
+---
+
+# 4. Multiple Diff View modes
+
+The original Clean Prose / Inline Diff experience was expanded into **four modes**:
+
+### 1. Clean Prose
+
+Readable revised text with changes highlighted.
+
+### 2. Inline Diff
+
+GitHub-style in-place comparison using:
+
+* `<del>`
+* `<ins>`
+
+### 3. Side-by-Side
+
+Original and revised versions displayed in separate panes.
+
+### 4. Changes Only
+
+Only the actual modifications are shown:
+
+* Replacements.
+* Additions.
+* Deletions.
+* Change counts.
+
+The selected diff mode was also made persistent through:
 
 ```text
-Stop Review
-↓
-UI says stopped
-↓
-requests continue in background
+ANP_GRAMMAR_DIFF_VIEW_MODE
 ```
 
 ---
 
-# 3. 🔴 The "structured review" feature isn't actually end-to-end yet
+# 5. Teacher / Editor Insights
 
-This is an important discrepancy.
+Introduced **Teacher's Insight**.
 
-The current prompt still explicitly says:
-
-> "Return ONLY the rewritten text."
-
-and:
+AI was changed to provide structured information such as:
 
 ```text
-Rewritten version:
+rewritten
+category
+confidence
+explanation
 ```
 
+Categories include things such as:
 
+* Grammar.
+* Punctuation.
+* Clarity.
+* Word choice.
 
-Yet the UI now displays:
+The explanation gives the user an educational reason for the suggested change rather than simply saying:
 
-* category
-* confidence
-* explanation
-* Teacher's Insight
+> "Here's a better sentence."
 
-Those are currently being derived from session/item fields, with fallback values such as:
+AI response parsing was also made resilient to:
 
-```js
-"Grammar, Punctuation & Clarity"
-```
-
-and:
-
-```js
-"High"
-```
-
-and a generated fallback explanation. 
-
-So the UI **looks like structured AI reasoning**, but the model is still primarily being asked for a rewritten string.
-
-That's not ideal.
-
-### I would change the API contract.
-
-For example:
-
-```json
-{
-  "suggestion": "...",
-  "hasChanges": true,
-  "changes": [
-    {
-      "category": "Grammar",
-      "original": "She go",
-      "replacement": "She goes",
-      "reason": "Subject-verb agreement",
-      "confidence": "high"
-    }
-  ],
-  "summary": "Corrected subject-verb agreement."
-}
-```
-
-Then validate it.
-
-If the model returns malformed JSON:
-
-```text
-structured parser
-       ↓
-invalid
-       ↓
-safe fallback
-       ↓
-plain suggestion
-```
-
-That gives you a **real Teacher/Editor system**, rather than a UI approximation.
+* JSON responses.
+* Markdown code fences.
+* Plain-text fallback.
 
 ---
 
-# 4. 🟠 Granularity switching is potentially destructive to review state
+# 6. Review actions were clarified
 
-This is another thing I would fix.
+The review workflow was strengthened around the four major actions:
 
-`handleSetGranularity()` creates a **brand-new `ReviewSession`**:
+### Accept
 
-```js
-const newSession = new ReviewSession({
-    noteUUID: session.noteUUID,
-    noteTitle: session.noteTitle,
-    originalContent: session.originalContent,
-    granularity: newMode,
-    promptPresetId: session.promptPresetId,
-    ...
-});
-```
+Use the AI recommendation as presented.
 
+### Reject
 
+Keep the original text.
 
-That means:
+### Edit
 
-```text
-Paragraph mode
-↓
-review 10 paragraphs
-↓
-switch to Sentence
-↓
-new session
-↓
-previous review decisions disappear
-```
-
-Even if that is currently intentional, it is dangerous UX.
-
-The user can easily interpret:
-
-> "I'm just changing how I navigate the review."
-
-not:
-
-> "I'm discarding the current review session."
-
-### Better
-
-Show:
-
-```text
-Change review granularity?
-
-Your current review contains:
-✓ 8 accepted
-✕ 2 rejected
-✎ 1 edited
-
-Changing granularity will start a new review map.
-
-[Keep Current] [Start New Review]
-```
-
-Or, better architecturally, preserve the previous session as a revision/pass.
-
----
-
-# 5. 🟠 Manual Edit on Pending items needs a defined meaning
-
-Your current state-aware UI allows:
-
-```text
-Pending
-
-⚡ Review This Item
-✏️ Manual Edit
-```
-
-
-
-I actually like this capability, but the semantics need to be explicit.
-
-If a user manually edits something **before AI review**, what does that mean?
-
-Possibilities:
-
-### A. User edit becomes final
-
-```text
-Pending
-→ Manual Edit
-→ Edited
-```
-
-### B. User wants AI to review their edited version
-
-```text
-Pending
-→ Manual Edit
-→ Edited
-→ Review My Edit
-```
-
-### C. User wants to edit only the AI suggestion
-
-Then Manual Edit shouldn't be available in Pending.
-
-I'd recommend **B**.
-
-That gives the teacher/editor flow:
-
-```text
-Original
-   ↓
-User edits
-   ↓
-"Review My Edit"
-   ↓
-AI evaluates the user's version
-```
-
-Very useful.
-
----
-
-# 6. 🟠 "Review" and "Re-Review" semantics should be stricter
-
-The sidebar label currently maps:
-
-```text
-suggestion_ready → Re-Review
-accepted         → Re-Review
-rejected         → Re-Review
-modified         → Re-Review
-reviewing        → Reviewing...
-default          → Review Item
-```
-
-
-
-That's mostly sensible.
-
-But I would make the semantic distinction:
-
-### Review
-
-> AI has never reviewed this item.
+Manually modify the AI suggestion.
 
 ### Re-Review
 
-> AI has already reviewed this item and the user wants another opinion.
+Ask the AI to reconsider the item.
 
-### Retry
-
-> The previous AI request failed.
-
-### Review My Edit
-
-> User manually changed the text and wants AI feedback.
-
-Those are four different operations.
-
-Don't collapse them into the same `runReview` pathway from the user's perspective.
+The goal was to make each action represent a distinct editorial decision instead of having ambiguous buttons.
 
 ---
 
-# 7. 🟡 Diff UI is implemented, but Side-by-Side deserves one more quality pass
+# 7. Manual-edit workflow was expanded
 
-The styling confirms the side-by-side infrastructure exists. 
+Manual editing received explicit reversible semantics.
 
-But the real test I would perform now is:
+Added:
 
-### Long paragraph
+* **✓ Accept Edit**
+* **↩ Discard Edit**
+* **✏️ Re-Edit**
+* **🔄 Review My Edit**
 
-```text
-Original: 30 lines
-Suggested: 32 lines
-```
-
-Scroll the left pane.
-
-Does the right pane remain synchronized?
-
-If not, "Side-by-Side" becomes merely:
-
-> Two independent text boxes.
-
-A proper editor-style diff needs either:
-
-* synchronized vertical scrolling, or
-* line/block correspondence.
-
-I would test:
-
-* large insertion
-* large deletion
-* paragraph replacement
-* multiple consecutive changes
-* long wrapped lines
-* mobile width
+This makes the user's own modification part of the review lifecycle instead of treating it as an uncontrolled special case.
 
 ---
 
-# 8. 🟡 The four diff modes should persist per session
+# 8. Re-Review became reason-guided
 
-If the user chooses:
+Instead of simply sending an item back to the AI, Re-Review now allows the user to specify why.
 
-```text
-Side-by-Side
-```
+Presets included:
 
-then moves:
+* Too aggressive — preserve voice.
+* Grammar only.
+* More concise.
+* Improve clarity.
+* Custom prompt.
 
-```text
-Next
-```
-
-I would expect Side-by-Side to remain selected.
-
-Don't reset to Clean Prose on every render.
-
-Likewise, potentially persist the preference:
-
-```text
-session.diffViewMode
-```
-
-and optionally:
-
-```text
-settings["Grammar Reviewer Diff View"]
-```
+This makes Re-Review an actual editorial instruction.
 
 ---
 
-# 9. 🟡 Your diff data attributes still suggest an incomplete fourth-mode implementation
+# 9. Undo support
 
-The rendered pane shown in the compiled bundle has:
+Added reversible decision handling.
 
-```html
-data-clean="..."
-data-inline="..."
-data-plain="..."
-```
-
-
-
-I would expect something like:
+Implemented:
 
 ```text
-data-clean
-data-inline
-data-side-by-side
-data-changes-only
+session.undo(index)
+session.canUndo(index)
 ```
 
-or, preferably, generate the view dynamically from the canonical diff model.
+and an:
 
-Otherwise you risk a situation where:
+> ↩ Undo
 
-> UI says there are four modes
+action.
 
-but one mode is actually reconstructed differently or incompletely.
+Keyboard support was also added for Undo.
 
 ---
 
-# 10. 🟡 Report/history has a potentially serious Markdown escaping issue
+# 10. Review-operation progress/loading feedback
 
-Your generated report inserts:
+Added the requested **top loading/progress indicator**.
 
-```js
-${finalContent}
-```
+The purpose was to make it obvious that:
 
-and:
+* An API request is happening.
+* Review All is processing.
+* The user should wait.
+* The interface hasn't frozen.
 
-```js
-${session.originalContent}
-```
+Also added:
 
-directly into Markdown. 
+> **Stop Review**
 
-The original content is inside a fenced code block, which is reasonably safe for ordinary Markdown, but **a user's content containing triple backticks can terminate that fence**.
-
-Likewise, the generated history embeds raw JSON inside:
-
-````markdown
-```json
-...
-````
-
-````
-
-:contentReference[oaicite:11]{index=11}
-
-You should either:
-
-- choose a fence longer than any contained backtick sequence, or
-- encode/sanitize the content.
-
-This is an edge case, but it's exactly the kind of integrity issue worth fixing in a mature plugin.
+for Review All.
 
 ---
 
-# 11. 🟠 History currently stores potentially very large duplicated content
+# 11. Real Review All cancellation
 
-Each history record contains:
+Cancellation was upgraded from UI-only behavior to actual workflow cancellation.
 
-```text
-items[].original
-items[].suggestion
-items[].customEdit
-originalContent
-finalContent
-````
+Implemented:
 
+* `cancelActiveOperation()`
+* Cancellation checks inside the Review All loop.
+* Immediate prevention of additional background requests after cancellation.
+* Partial-failure tracking/reporting.
 
-
-For a large note this can become substantial.
-
-For example:
-
-```text
-Original document: 50 KB
-Final document:    50 KB
-Suggestions:       50 KB+
-Items/diffs:       50 KB+
-```
-
-One history note could become hundreds of KB.
-
-I'd consider:
-
-```text
-history mode:
-  summary only
-  full audit
-```
-
-and only store full payload when explicitly requested.
-
----
-
-# 12. 🟠 Review All failure semantics need improvement
-
-Currently an error is caught and only logged:
-
-```js
-catch (err) {
-  console.warn(...)
-}
-```
-
-then the loop continues. 
-
-That's actually good for resilience, but bad for user awareness.
-
-Suppose:
-
-```text
-20 items
-
-1 ✓
-2 ✓
-3 ✓
-4 ✕ API error
-5 ✓
-...
-20 ✓
-```
-
-The user needs:
-
-```text
-Review complete
-
-18 reviewed successfully
-1 failed
-1 skipped
-
-⚠ Paragraph 4 could not be reviewed
-
-[Review Failed Items]
-```
-
-Otherwise the user may believe:
-
-> "All 20 were reviewed."
-
-when they weren't.
-
----
-
-# 13. 🔴 Do not count "reviewed" simply as "not pending"
-
-The metrics currently expose:
-
-```text
-reviewed / total
-accepted
-pending
-rejected
-```
-
-
-
-You need to decide precisely whether:
-
-```text
-error
-reviewing
-edited
-no_change
-```
-
-count as reviewed.
-
-I'd define:
-
-```text
-AI reviewed
-= suggestion_ready
-+ accepted
-+ rejected
-+ edited
-+ no_change
-```
-
-and separately:
-
-```text
-failed
-cancelled
-pending
-```
-
-This prevents progress from saying:
-
-```text
-100% complete
-```
-
-when some items actually failed.
-
----
-
-# 14. 🟢 The state-aware action UI is now much better
-
-This part is a genuine success.
-
-For `suggestion_ready`, you now expose:
-
-```text
-✓ Accept
-✕ Reject
-✏ Edit
-↻ Re-Review
-```
-
-and for pending:
-
-```text
-⚡ Review This Item
-✏ Manual Edit
-```
-
-
-
-That's a major improvement over the original design.
-
-But the **state machine itself must be the authority**.
-
-Don't rely only on UI hiding buttons.
-
-For example:
-
-```js
-acceptItem(index)
-```
-
-should reject an invalid transition:
-
-```text
-pending → accepted
-```
-
-if the application somehow invokes it directly.
-
-The model should enforce:
-
-```text
-suggestion_ready → accepted
-```
-
-not:
-
-```text
-anything → accepted
-```
-
----
-
-# 15. The next testing phase should be scenario testing, not just unit testing
-
-66/66 is excellent.
-
-But now you've reached the stage where **workflow tests matter more than another 20 unit tests**.
-
-I'd add these scenarios.
-
-### Scenario A — Sentence preservation
-
-```text
-Paragraph with 4 sentences
-↓
-review sentence 2
-↓
-accept
-↓
-save
-```
-
-Assert:
-
-```text
-Sentence 1 unchanged
-Sentence 2 changed
-Sentence 3 unchanged
-Sentence 4 unchanged
-Paragraph boundaries unchanged
-```
-
----
-
-### Scenario B — Markdown
-
-Test:
-
-````markdown
-# Heading
-
-**bold**
-*italic*
-[link](...)
-- list
-- list
-
-> quote
-
-`code`
-
-```code
-block
-````
-
-````
-
-Review sentence in the middle.
-
-Assert **byte-level preservation of untouched structures** where appropriate.
-
----
-
-### Scenario C — Review All + failure
-
-```text
-10 items
-item 4 → API failure
-````
-
-Assert:
-
-```text
-9 success
-1 failure
-10 attempted
-```
-
-and UI exposes the failure.
-
----
-
-### Scenario D — Cancel
+So:
 
 ```text
 Review All
-↓
-cancel after item 3
+   ↓
+Item 1
+Item 2
+Item 3
+   ↓
+STOP
+   ↓
+No more API calls
 ```
 
-Assert:
+rather than simply hiding the loading indicator while requests continue.
+
+---
+
+# 12. Save integrity / stale-note protection
+
+Added a **stale note overwrite guard**.
+
+Immediately before saving, the plugin re-reads the current note content.
+
+If the note has changed externally during the review:
 
 ```text
-items 1-3 processed
-4+ remain pending
-no subsequent API calls
-operation becomes idle
+Review started
+      ↓
+User edits note elsewhere
+      ↓
+Review completes
+      ↓
+Plugin tries to save
+      ↓
+Detect external modification
+      ↓
+Protect against accidental overwrite
+```
+
+This was one of the most important integrity fixes.
+
+---
+
+# 13. Granularity-switch protection
+
+Changing between review granularities while decisions already exist was made safer.
+
+For example:
+
+```text
+Sentence
+    ↓
+Paragraph
+```
+
+when the session already contains:
+
+* Accepted items.
+* Rejected items.
+* Modified items.
+
+now produces a confirmation rather than silently invalidating existing decisions.
+
+---
+
+# 14. Prompt system improvements
+
+The large collection of preset prompt buttons was redesigned into a dropdown.
+
+Grouped into:
+
+### Correction & Polish
+
+* Fix Grammar & Spelling.
+* Minimal Changes / Preserve Voice.
+* Teacher & Coach / Clarity & Flow.
+
+### Conciseness & Style
+
+* Shorten & Make Concise.
+* Remove Passive Voice.
+* Omit Unnecessary Adverbs.
+* Improve Flow & Rhythm.
+
+### Tone & Voice
+
+* Professional & Business Tone.
+* Academic & Analytical Tone.
+* Add Subtle Humor & Wit.
+
+### Custom Guidance
+
+* Custom Prompt Override.
+
+Also added a live description of the selected style.
+
+---
+
+# 15. New review presets
+
+Added:
+
+### Minimal Changes — Preserve Voice
+
+Designed to make the AI less intrusive.
+
+### Teacher & Coach — Clarity & Flow
+
+Designed to make the AI more educational and explanatory.
+
+---
+
+# 16. Sandbox-safe modal system
+
+A major technical issue was discovered:
+
+Amplenote embeds run inside a sandbox where native:
+
+```js
+prompt()
+confirm()
+alert()
+```
+
+could be blocked.
+
+This caused dead interactions.
+
+Replaced them with an in-DOM modal architecture:
+
+* `showAppPrompt()`
+* `showAppConfirm()`
+* `showAppChoice()`
+
+This fixed:
+
+* Custom Prompt.
+* Manual Edit.
+* Reset Session.
+* Delete API Key.
+* Re-Review reason selection.
+
+No native prompt/confirm/alert dependency remains in the embed.
+
+---
+
+# 17. Sidebar layout improvements
+
+Fixed button wrapping in the sidebar.
+
+The review controls were changed to a two-column layout with:
+
+* Consistent button heights.
+* Minimum touch targets.
+* No unwanted text wrapping.
+* Better spacing.
+
+---
+
+# 18. Note tags in the header
+
+The active note's assigned tags were retrieved and displayed beside the note title.
+
+For example:
+
+```text
+My Article   #writing  #draft
+```
+
+This gives the review screen more context about the note being worked on.
+
+---
+
+# 19. Expanded visual themes
+
+Expanded the theme system to **12 curated themes**.
+
+Light themes included:
+
+* Clean Daylight.
+* Sepia Parchment.
+* Sakura Blossom.
+* Matcha Latte.
+* Nord Frost.
+
+Dark themes included:
+
+* Midnight Slate.
+* Nord Arctic.
+* Glassmorphism.
+* Emerald Forest.
+* Cyber Violet.
+* Espresso Obsidian.
+* Dracula Neo.
+
+---
+
+# 20. Markdown/code-fence integrity
+
+Identified a potential Markdown corruption problem where user content could itself contain long sequences of backticks.
+
+Added:
+
+```text
+getSafeMarkdownFence()
+```
+
+which dynamically creates a Markdown code fence longer than any backtick sequence contained in the user content.
+
+This was applied to report/history generation.
+
+---
+
+# 21. Documentation cleanup
+
+Updated:
+
+* `README.md`
+* `CODE_DOCUMENTATION.md`
+* `DESIGN_PHILOSOPHY.md`
+* `RELEASE_NOTES.md`
+* `ds.md`
+
+Removed machine-specific/local references such as:
+
+```text
+file:///...
+C:\Users\...
+```
+
+and replaced them with portable relative references.
+
+---
+
+# 22. Comprehensive scenario/integration testing
+
+Added end-to-end scenario coverage for the risky workflows.
+
+Scenarios included:
+
+* Sentence preservation.
+* Markdown structure preservation.
+* Partial API failure.
+* Mid-stream cancellation.
+* Stale-note overwrite protection.
+* Granularity switching.
+* Manual-edit workflow.
+
+This expanded the test coverage from the earlier **66 tests** to:
+
+> **78/78 passing**
+
+across:
+
+> **11/11 test suites**
+
+---
+
+# 23. Static verification
+
+Ran ESLint against the project.
+
+Result:
+
+> **0 errors**
+>
+> **0 warnings**
+
+---
+
+# 24. Production bundle verification
+
+Ran:
+
+```text
+node esbuild.js 23
+```
+
+and successfully generated:
+
+```text
+anp-23-grammar-reviewer/build/grammar-reviewer.compiled.js
+```
+
+So the source implementation was also verified through the actual production bundling process.
+
+---
+
+# 25. Final AI-provider/quota discussion
+
+After the main implementation was complete, we looked at the operational issue of **free AI provider limits**.
+
+The main conclusions were:
+
+* OpenRouter's free-plan quota should be represented as a configurable daily limit.
+* Groq limits are model/account dependent.
+* Gemini limits are model/project/tier dependent.
+* Mistral limits are dynamic.
+* Cohere has trial/free limits that should be configurable.
+* We should **not hard-code uncertain provider limits** as permanent truths.
+
+---
+
+# 26. AI Usage & Limits feature was scoped
+
+We then deliberately simplified the original idea.
+
+Instead of building a complicated usage system with:
+
+* 1,000-event request ledgers.
+* Token accounting.
+* Audio dimensions.
+* Complex quota APIs.
+* Provider-specific rate-limit parsers.
+
+we settled on a lightweight system.
+
+### Store:
+
+```js
+{
+  date: "2026-08-20",
+
+  today: {
+    success: 14,
+    failed: 2
+  },
+
+  lifetime: {
+    success: 128,
+    failed: 4
+  },
+
+  providers: {
+    OpenRouter: {
+      today: { success: 12, failed: 1 },
+      lifetime: { success: 100, failed: 3 }
+    }
+  }
+}
 ```
 
 ---
 
-### Scenario E — Stale save
+# 27. Amplenote setting for usage data
 
-```text
-Start review
-↓
-modify note externally
-↓
-Save
-```
+You decided that usage should be stored as an **Amplenote setting**, rather than introducing another storage mechanism.
 
-Expected:
-
-```text
-NO replaceNoteContent()
-Conflict shown
-```
-
-This should be a **must-pass test**.
+This gives the plugin persistent usage data without creating another complicated persistence layer.
 
 ---
 
-### Scenario F — Granularity switching
+# 28. Provider-wise usage tracking
+
+We decided to track usage separately for each provider.
+
+So the user can eventually see:
 
 ```text
-Paragraph mode
-↓
-review 3
-↓
-switch Sentence
+OpenRouter     12 ✓   1 ✕
+Groq            2 ✓   0 ✕
+Gemini          5 ✓   0 ✕
 ```
 
-Verify exactly what happens to the prior review.
-
----
-
-### Scenario G — Manual edit
+while also having:
 
 ```text
-Pending
-↓
-Manual Edit
-↓
-Review My Edit
+Today
+14 requests
+
+Lifetime
+128 requests
 ```
 
-Verify no accidental loss of the manual change.
-
 ---
 
-# 16. One thing I would *not* add yet
+# 29. Usage UI location was finalized
 
-You've already added a lot:
+You decided:
 
-* 12 themes
-* tags
-* diff modes
-* navigation
-* Teacher's Insight
-* undo
-* cancellation
-* re-review reasons
-* custom prompts
-* new presets
-* progress
-* history
-* stale-save protection
+> **Inside the existing Settings page.**
 
-I would **stop adding visual features for now**.
-
-The product has crossed the point where another feature could actually make it worse.
-
-The next pass should be:
-
-> **Integrity → state transitions → async behavior → scenario testing → polish**
-
-not another feature pass.
-
----
-
-# 17. The ideal final architecture
-
-You're now very close to this:
+No new:
 
 ```text
-                    ┌──────────────┐
-                    │ Original Note│
-                    └──────┬───────┘
-                           ↓
-                    ┌──────────────┐
-                    │ Tokenization │
-                    │ + Source Map │
-                    └──────┬───────┘
-                           ↓
-                    ┌──────────────┐
-                    │ Review Queue │
-                    └──────┬───────┘
-                           ↓
-                 ┌─────────────────────┐
-                 │     AI Review       │
-                 │ suggestion + reason │
-                 └──────────┬──────────┘
-                            ↓
-                 ┌─────────────────────┐
-                 │    Diff / Teacher   │
-                 │    explanation      │
-                 └──────────┬──────────┘
-                            ↓
-              ┌─────────────┼─────────────┐
-              ↓             ↓             ↓
-           Accept        Reject          Edit
-              │             │             │
-              └─────────────┼─────────────┘
-                            ↓
-                       Re-Review
-                            ↓
-                       Final State
-                            ↓
-                    ┌──────────────┐
-                    │ Fresh Note   │
-                    │ Verification │
-                    └──────┬───────┘
-                           ↓
-                         SAVE
+AI Usage
 ```
 
-That is the architecture I'd now aim to **lock down**.
+tab.
 
-## Bottom line
-
-The implementation has moved from the previous audit's **"good foundation but incomplete workflow"** to **"strong product architecture with a handful of important second-pass defects."**
-
-The biggest remaining items are:
-
-1. **Verify/fix the stale-note save guard** — 🟢 Resolved & Verified
-2. **Make Review All cancellation real, not just visual** — 🟢 Resolved & Verified
-3. **Make structured Teacher Insight genuinely AI-derived** — 🟢 Resolved & Verified
-4. **Handle granularity switching without silently losing work** — 🟢 Resolved & Verified
-5. **Make Review All failures visible in final progress/results** — 🟢 Resolved & Verified
-6. **Add scenario/integration tests around save, cancel, Markdown, sentence preservation, and state transitions** — 🟢 Resolved & Verified (78/78 tests passing)
-7. **Then do one final compiled-bundle audit after rebuilding.** — 🟢 Rebuilt & Verified
+No new navigation.
 
 ---
 
-# 18. ✅ Audit Resolution & Verification Report
+# 30. Usage section design was finalized
 
-All second-pass audit findings identified above have been systematically fixed, tested, and compiled into the production bundle:
+You then made an important UX refinement:
 
-### Summary of Fixes Implemented:
+### Don't show "Active Provider"
 
-1. **🔴 Save Integrity & Stale Note Guard (`lib/features/saveHandler.js`, `grammar-reviewer.js`)**:
-   - Compares active note content via `app.getNoteContent({ uuid: noteUUID })` immediately prior to `app.replaceNoteContent`.
-   - Normalizes newlines and whitespace; prompts the user if external edits are detected.
-   - If user declines overwrite, cleanly aborts with `{ success: false, cancelled: true }` and notifies the user without overwriting data.
-   - Verified in bundle and unit/scenario tests.
+There is no need for:
 
-2. **🔴 Real Review All Cancellation (`lib/features/reviewWorkflow.js`, `lib/ui/dashboardTemplate.js`)**:
-   - Implemented `cancelActiveOperation()` in client-side script dispatching `cancelReviewAll`.
-   - `handleReviewAll` checks `isReviewAllCancelled` on each iteration loop step.
-   - Returns structured summary `{ reviewedCount, failedCount, failedIndices, cancelled }`.
+```text
+Active: OpenRouter
+```
 
-3. **🟠 Structured AI Teacher Insights (`lib/engine/promptPresets.js`)**:
-   - Updated system prompts to request structured JSON containing `rewritten`, `category`, `confidence`, and educational `explanation`.
-   - Built `parseAiResponse` with JSON fence extraction and clean plain-text fallback parsing.
-   - Connected directly into `ReviewSession.setSuggestion(idx, suggestion, metadata)`.
+because the usage system is provider-wide.
 
-4. **🟠 Granularity Switching Protection (`lib/ui/dashboardTemplate.js`)**:
-   - `handleGranularityChange` checks if existing session contains active decisions (`accepted`, `modified`, `rejected`).
-   - Displays modal confirmation summarizing current progress before resetting session.
+Instead, use a collapsible:
 
-5. **🟠 Manual Edit & State Semantics (`lib/ui/diffViewComponent.js`)**:
-   - Distinct actions for every state:
-     - `pending`: `⚡ Review This Item`, `✏️ Manual Edit`.
-     - `suggestion_ready`: `✓ Accept`, `✗ Reject`, `✏️ Edit`, `🔄 Re-Review`.
-     - `modified`: `✓ Accept Edit`, `↩ Discard Edit`, `✏️ Re-Edit`, `🔄 Review My Edit`.
-     - `error`: `⚠️ Retry Review`, `✏️ Manual Edit`.
+```text
+▶ 📊 AI Usage & Limits
+   14 today · 128 lifetime
+```
 
-6. **🟡 Diff View Persistence & Data Cleanliness (`lib/ui/dashboardTemplate.js`)**:
-   - Persists user view preference in `localStorage` under `ANP_GRAMMAR_DIFF_VIEW_MODE`.
-   - Maintains selected mode across navigation.
-   - Dual-pane synchronized scrolling active.
+When expanded:
 
-7. **🟡 Markdown Code Fence Escaping (`lib/data/reportGenerator.js`, `lib/data/historyManager.js`)**:
-   - Added `getSafeMarkdownFence()` to dynamically construct code block delimiters longer than any sequence of backticks in user content.
+```text
+▼ 📊 AI Usage & Limits
+```
 
-8. **🔴 Scenario & Workflow Integration Test Suite (`test/scenarioWorkflow.test.js`)**:
-   - **Scenario A**: Sentence preservation across paragraphs and punctuation boundaries.
-   - **Scenario B**: Markdown preservation (headings, lists, bold, blockquotes, code blocks).
-   - **Scenario C**: Review All with partial API failure resilience.
-   - **Scenario D**: Review All mid-stream cancellation.
-   - **Scenario E**: Stale save guard preventing accidental overwrite.
-   - **Scenario F**: Granularity switching baseline preservation.
-   - **Scenario G**: Manual edit workflow, state transitions, and undo.
+with:
 
-### Test & Build Verification:
-- **Test Suite**: `11 passed, 11 total`
-- **Total Tests**: `78 passed, 78 total` (0 failures)
-- **Production Bundle**: Successfully built at `build/grammar-reviewer.compiled.js`
+* Today's requests.
+* Success/failure counts.
+* Lifetime requests.
+* Provider breakdown.
+* Configured daily limit.
+* Usage progress.
+* Reset Today's Count.
+* Reset All Statistics.
+* Brief explanatory information.
+
+---
+
+# 31. Daily limit behavior was finalized
+
+Provider limits should be:
+
+* Configurable.
+* Used for warnings.
+* **Not hard-blocking by default.**
+
+Example:
+
+```text
+14 / 50
+██████░░░░░░░░
+```
+
+and warnings at higher percentages.
+
+The user should still be able to make a request even when the locally configured limit is reached because the plugin cannot necessarily know the provider's true account-wide usage.
+
+---
+
+# 32. Request-count semantics were clarified
+
+A request means:
+
+> **An actual AI API attempt.**
+
+Therefore:
+
+```text
+Review Item       → +1
+Review All × 10   → +10
+Re-Review         → +1
+Review My Edit    → +1
+429               → +1 request + failed
+500               → +1 request + failed
+```
+
+But:
+
+```text
+Accept
+Reject
+Edit
+Undo
+Diff switching
+Navigation
+```
+
+do **not** count as API requests.
+
+---
+
+# 33. Final architecture direction
+
+The final lightweight architecture became:
+
+```text
+constants.js
+    ↓
+DEFAULT_PROVIDER_LIMITS
+
+usageTracker.js
+    ↓
+persistent usage + rollover + reset
+
+reviewWorkflow.js
+    ↓
+record API attempts/results
+
+dashboardTemplate.js
+    ↓
+collapsible AI Usage & Limits
+```
+
+No over-engineered quota subsystem.
+
+---
+
+# 34. Overall final state
+
+So, from the beginning, ANP-23 evolved through roughly this progression:
+
+```text
+AUDIT
+  ↓
+Find bugs / integrity issues
+  ↓
+Improve review navigation
+  ↓
+Improve diff presentation
+  ↓
+Add Teacher/Editor guidance
+  ↓
+Clarify Accept / Reject / Edit / Re-Review
+  ↓
+Make Re-Review reason-driven
+  ↓
+Add Undo
+  ↓
+Add progress/loading feedback
+  ↓
+Make cancellation real
+  ↓
+Protect saves from stale notes
+  ↓
+Protect granularity changes
+  ↓
+Fix sandbox modal problems
+  ↓
+Improve prompts / presets
+  ↓
+Improve themes / visual UX
+  ↓
+Preserve Markdown safely
+  ↓
+Add integration/scenario tests
+  ↓
+Clean documentation
+  ↓
+Run ESLint
+  ↓
+Run 78-test suite
+  ↓
+Build production bundle
+  ↓
+Audit AI-provider limits
+  ↓
+Design lightweight AI Usage & Limits
+  ↓
+Provider-wise tracking
+  ↓
+Amplenote setting persistence
+  ↓
+Collapsible Settings UI
+  ↓
+Daily/lifetime statistics
+  ↓
+Reset controls
+  ↓
+Configurable soft limits
+```
+
+### Final verification reached before the usage work
+
+**11/11 suites passing**
+**78/78 tests passing**
+**0 ESLint errors/warnings**
+**Production bundle successfully generated**
+
+So the main ANP-23 audit/UX hardening phase was effectively completed, and the **AI Usage & Limits** work was the final operational enhancement we subsequently scoped.

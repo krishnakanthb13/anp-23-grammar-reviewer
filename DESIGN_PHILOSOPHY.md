@@ -60,6 +60,14 @@ Background and multi-item operations must maintain strict integrity:
 - **Transparent Failure Handling**: If an API provider rate-limits or throws an error on a specific paragraph, errors are never silently swallowed. The affected chunk is visibly marked with `⚠️ Review Failed` and an explicit `⚠️ Retry Review` action.
 - **Destructive Action Protections**: Switching granularity or committing to notes with external modifications must prompt the user with clear decision summaries before discarding or overwriting data.
 
+## 12. Transparent AI Quota Awareness & Provider Accounting
+Managing third-party AI APIs requires complete visibility without surveillance:
+- **Local-Only Quota Telemetry**: Free API tiers (like OpenRouter's 50 requests/day or Groq's 1,000 requests/day) are valuable resources. The plugin tracks request success/error counts directly inside Amplenote plugin settings (`AI Usage Stats`) without sending usage data to any external analytics server.
+- **Provider-Wise Transparency**: Rather than an opaque single counter, usage is attributed per-provider so writers know exactly where their quota was spent.
+- **User Ownership & Control**: Daily counts roll over automatically at midnight, and users maintain total control with 1-click on-demand resets for daily or all-time statistics.
+
+
+
 
 
 

@@ -65,6 +65,15 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
     - 💜 `Cyber Violet` (Neon violet & indigo velvet)
     - ☕ `Espresso Obsidian` (Warm dark roasted espresso & amber)
     - 🧛 `Dracula Neo` (Vampire dark slate with magenta & cyan)
+- **AI Usage Statistics & Free Quota Tracking**:
+  - **Amplenote-Safe Persistence**: Saves all API request metrics securely inside Amplenote plugin settings (`AI Usage Stats`) without external database dependencies.
+  - **Provider-Wise Breakdown**: Tracks daily and lifetime successful and failed request counts globally and per-provider (OpenRouter, Gemini, Groq, Mistral, Ollama, DeepSeek, OpenAI, Anthropic).
+  - **Free Rate Limit Awareness**: Displays known free-tier limits (OpenRouter ~50 req/day, Groq 1,000 req/day, Gemini/Mistral dynamic tiers).
+  - **Automatic Daily Rollover**: Automatically resets today's count to zero at midnight while preserving lifetime statistics.
+  - **Collapsible On-Demand Settings UI**: Neatly tucked away in a native collapsible card at the bottom of Settings, with quick-action resets (`[🔄 Reset Today's Stats]` and `[🗑️ Reset All Statistics]`).
+- **Live API Key Indicators & Diagnostics**:
+  - **Status Dot for Configured Keys**: Displays a real-time green glowing indicator dot (`🟢`) on provider cards that have valid keys configured, and a muted gray dot (`⚪`) for missing keys.
+  - **One-Click `[⚡ Test API]` Diagnostics**: Send a live test ping directly from Settings to verify your API key, measuring round-trip latency in milliseconds (`⚡ Validated (180ms)`).
 - **Assigned Note Tags in Header**:
   - Automatically queries and displays note tags as clean pill badges (e.g. `#work #draft`) next to the note title in the header subtitle.
 - **Categorized Prompt Style Dropdown**:
@@ -108,9 +117,10 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 | `setting` | `Ollama Base URL` |
 | `setting` | `Custom AI Model` |
 | `setting` | `Custom Base URL` |
+| `setting` | `AI Usage Stats` |
 
 > [!NOTE]
-> No new settings rows are needed! The plugin automatically manages per-provider model overrides and key preferences within these standard settings.
+> `AI Usage Stats` is automatically managed by the plugin to store daily and lifetime request telemetry per provider.
 
 3. **Insert Code Block**: Below the table, create a Javascript code block (```` ```javascript ````).
 4. **Paste Compiled Code**: Copy the bundle from [`build/grammar-reviewer.compiled.js`](https://github.com/krishnakanthb13/amplenote_stg_plugins/blob/main/anp-23-grammar-reviewer/build/grammar-reviewer.compiled.js) and paste it inside the code block.
@@ -139,7 +149,7 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 ## 🛠️ Development & Testing
 
 ```bash
-# Run complete test suite (79 unit and workflow scenario tests across 11 test suites)
+# Run complete test suite (86 unit and workflow scenario tests across 12 test suites)
 $env:NODE_OPTIONS="--experimental-vm-modules"; npx jest anp-23-grammar-reviewer/test
 
 # Run standalone 8-AI provider diagnostic simulation

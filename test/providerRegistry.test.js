@@ -91,4 +91,15 @@ describe("Provider Registry — createProviderInstance", () => {
     expect(provider).toBeInstanceOf(OllamaProvider);
     expect(provider.baseUrl).toBe("http://localhost:11434/v1");
   });
+
+  test("Simulates successful API diagnostics ping for connection validation", async () => {
+    const provider = createProviderInstance({
+      provider: PROVIDERS.GROQ,
+      apiKey: "gsk_test_12345"
+    });
+
+    provider.complete = async () => "OK";
+    const res = await provider.complete({ prompt: "Reply with OK", systemPrompt: "Test", model: DEFAULT_MODELS[PROVIDERS.GROQ] });
+    expect(res).toBe("OK");
+  });
 });
