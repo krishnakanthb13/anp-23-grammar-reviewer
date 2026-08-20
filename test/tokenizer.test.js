@@ -1,6 +1,12 @@
-import { tokenizeContent, tokenizeParagraphs, tokenizeSentences } from "../lib/engine/tokenizer.js";
+import {
+  tokenizeContent,
+  tokenizeParagraphs,
+  tokenizeSentences,
+  splitIntoSentences,
+  isInspectableText
+} from "../lib/engine/tokenizer.js";
 
-describe("Markdown Tokenizer", () => {
+describe("Markdown Tokenizer — Happy Path", () => {
   test("Tokenizes paragraphs while preserving codeblocks intact", () => {
     const markdown = `# Title
 
@@ -34,5 +40,49 @@ Second paragraph after codeblock.`;
     const chunks = tokenizeContent(text, "full");
     expect(chunks.length).toBe(1);
     expect(chunks[0].original).toBe(text);
+    expect(chunks[0].type).toBe("full");
+  });
+});
+
+describe("Markdown Tokenizer — Edge Cases", () => {
+  test("Handles null, undefined, and empty string input", () => {
+    expect(tokenizeContent(null)).toEqual([]);
+    expect(tokenizeContent(undefined)).toEqual([]);
+    expect(tokenizeContent("")).toEqual([]);
+    expect(tokenizeParagraphs("")).toEqual([]);
+  });
+
+  test("Detects non-inspectable content like thematic breaks and whitespace", () => {
+    expect(isInspectableText("---")).toBe(false);
+    expect(isInspectableText("***")).toBe(false);
+    expect(isInspectableText("   ")).toBe(false);
+    expect(isInspectableText("a")).toBe(false); // <= 2 characters
+    expect(isInspectableText("Real substantive text")).toBe(true);
+  });
+
+  test("Protects numbers with decimal points during sentence splitting", () => {
+    const text = "The stock increased by 4.5% in Q3. Revenue was $12.8M.";
+    const sentences = splitIntoSentences(text);
+    expect(sentences.length).toBe(2);
+    expect(sentences[0]).toContain("4.5%");
+    expect(sentences[1]).toContain("$12.8M");
+  });
+});
+
+describe("Markdown Tokenizer — Error Handling & Fallbacks", () => {
+  test("Falls back to paragraph mode for unknown granularity mode", () => {
+    const text = "First paragraph.\n\nSecond paragraph.";
+    const chunks = tokenizeContent(text, "unknown_mode");
+    expect(chunks.length).toBeGreaterThan(1);
+  });
+});
+
+describe("Markdown Tokenizer — Regression Tests", () => {
+  test("CRLF line endings (\\r\\n) are cleanly normalized without leaving carriage returns", () => {
+    const crlfText = "Paragraph 1\r\n\r\nParagraph 2\r\n\r\n```js\r\nconst x = 1;\r\n```";
+    const paragraphs = tokenizeParagraphs(crlfText);
+    for (const p of paragraphs) {
+      expect(p.original).not.toContain("\r");
+    }
   });
 });

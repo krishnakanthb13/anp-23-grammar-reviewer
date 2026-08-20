@@ -94,11 +94,8 @@ async function runDiagnostics() {
 
   for (const tc of testCases) {
     let capturedUrl = "";
-    let capturedOptions = null;
-
-    global.fetch = async (url, options) => {
+    global.fetch = async (url) => {
       capturedUrl = String(url);
-      capturedOptions = options;
       return {
         ok: true,
         json: async () => tc.mockResponse
@@ -140,7 +137,7 @@ async function runDiagnostics() {
   global.fetch = originalFetch;
 
   console.log("==================================================================");
-  console.log(`📊 RESULTS: ${passed}/${testCases.length} Providers Verified Successfully!`);
+  console.log(`📊 RESULTS: ${passed}/${testCases.length} Passed, ${failed} Failed`);
   console.log("==================================================================\n");
 }
 

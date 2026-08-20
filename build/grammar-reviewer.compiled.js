@@ -1373,11 +1373,13 @@ ${JSON.stringify(record, null, 2)}
   };
 }
 function parseHistoryNotes(notes = []) {
+  if (!Array.isArray(notes)) return [];
   const jsonRecords = [];
   const fallbackRecords = [];
   const knownTimestamps = /* @__PURE__ */ new Set();
   const knownSourceNoteTimestamps = /* @__PURE__ */ new Set();
   for (const note of notes) {
+    if (!note || typeof note !== "object") continue;
     const raw = note.body || note.content || "";
     const match = raw.match(/```json\s*([\s\S]*?)\s*```/);
     if (match && match[1]) {
@@ -1396,11 +1398,12 @@ function parseHistoryNotes(notes = []) {
       } catch (err) {
         console.warn("[GrammarReviewer] Could not parse history record for note:", note.uuid, err);
       }
-    } else if (raw && (raw.includes("Grammar Review") || raw.includes("Grammar & Style") || raw.includes("Changes Report"))) {
-      const titleMatch = raw.match(/# (?:Grammar Review )?(?:Changes )?Report:?\s*(.*)/i) || raw.match(/Source Note:\s*\[([^\]]+)\]/i);
-      const dateMatch = raw.match(/\*\*Date:\*\*\s*(.*)/i) || raw.match(/Date:\s*(.*)/i);
+    } else if (raw && (raw.includes("Grammar Review") || raw.includes("Grammar & Style") || raw.includes("Changes Report") || raw.includes("Grammar Changes"))) {
+      const titleMatch = raw.match(/# (?:(?:📝|📜) )?(?:Grammar (?:& Style )?Review )?(?:Changes|Report)?(?:\s*:\s*|\s+)(.*)/i) || raw.match(/Source Note:\s*\[([^\]]+)\]/i);
+      const uuidMatch = raw.match(/amplenote\.com\/notes\/([a-zA-Z0-9_-]+)/i);
+      const dateMatch = raw.match(/\*\*Date:\*\*\s*(.*)/i) || raw.match(/\*\*Review Date:\*\*\s*(.*)/i) || raw.match(/Date:\s*(.*)/i);
       const changesMatch = raw.match(/(\d+)\s*(?:changes?|replacements?|items?)/i);
-      const providerMatch = raw.match(/Provider:\s*([^\n\r]+)/i);
+      const providerMatch = raw.match(/(?:\*\*)?Provider:(?:\*\*)?\s*([^\n\r*]+)/i) || raw.match(/AI Engine:\s*`([^`]+)`/i);
       const ts = parseInt(note.name, 10) || (dateMatch ? Math.floor(new Date(dateMatch[1]).getTime() / 1e3) : 0);
       fallbackRecords.push({
         noteUUID: note.uuid,
@@ -1408,7 +1411,7 @@ function parseHistoryNotes(notes = []) {
         timestamp: ts || Math.floor(Date.now() / 1e3),
         isoDate: dateMatch ? dateMatch[1].trim() : (/* @__PURE__ */ new Date()).toISOString(),
         sourceNote: {
-          uuid: note.uuid,
+          uuid: uuidMatch ? uuidMatch[1] : note.uuid,
           title: titleMatch ? titleMatch[1].trim() : note.name || "Grammar Review"
         },
         session: {

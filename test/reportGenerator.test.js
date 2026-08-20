@@ -1,5 +1,4 @@
 import { generateChangesReport } from "../lib/data/reportGenerator.js";
-import { generateHistoryRecord } from "../lib/data/historyManager.js";
 import { ReviewSession } from "../lib/engine/reviewSession.js";
 
 describe("Report and History Generator", () => {

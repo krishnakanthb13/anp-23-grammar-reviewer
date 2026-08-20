@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 import { createProviderInstance } from "../lib/providers/providerRegistry.js";
-import { PROVIDERS, DEFAULT_MODELS } from "../lib/constants.js";
+import { PROVIDERS } from "../lib/constants.js";
 
 describe("AI Provider Suite - Comprehensive Dummy API Tests for All 8 Providers", () => {
   const originalFetch = global.fetch;
