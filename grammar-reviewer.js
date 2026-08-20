@@ -14,7 +14,7 @@ import { handleSaveAndCommit } from "./lib/features/saveHandler.js";
 import { loadHistoryRecords } from "./lib/features/historyViewer.js";
 import { buildDashboardTemplate, renderReviewWorkspace } from "./lib/ui/dashboardTemplate.js";
 import { DEFAULT_MODELS, DEFAULT_PROVIDER, PROVIDERS } from "./lib/constants.js";
-import { getUsageStats, resetUsage } from "./lib/data/usageTracker.js";
+import { getUsageStats, resetUsage, recordUsage } from "./lib/data/usageTracker.js";
 
 let activeTabState = "review";
 
@@ -427,6 +427,7 @@ const plugin = {
       console.error("[GrammarReviewer] Error processing onEmbedCall:", err);
       const errorMsg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Unknown error";
       await app.alert(`Reviewer Error: ${errorMsg}`);
+      return { success: false, error: errorMsg };
     }
   },
 

@@ -221,13 +221,24 @@ function tokenizeParagraphs(text) {
   const paragraphs = [];
   let currentBuffer = [];
   let inCodeFence = false;
+  let codeFenceLen = 0;
   let idCounter = 1;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (line.trim().startsWith("```")) {
-      inCodeFence = !inCodeFence;
-      currentBuffer.push(line);
-      continue;
+    const trimmedLine = line.trim();
+    const fenceMatch = trimmedLine.match(/^(`{3,})/);
+    if (fenceMatch) {
+      if (!inCodeFence) {
+        inCodeFence = true;
+        codeFenceLen = fenceMatch[1].length;
+        currentBuffer.push(line);
+        continue;
+      } else if (fenceMatch[1].length >= codeFenceLen && trimmedLine === fenceMatch[1]) {
+        inCodeFence = false;
+        codeFenceLen = 0;
+        currentBuffer.push(line);
+        continue;
+      }
     }
     if (inCodeFence) {
       currentBuffer.push(line);
@@ -305,7 +316,7 @@ function tokenizeSentences(text) {
 var ABBREVIATIONS_PATTERN = /\b(e\.g\.|i\.e\.|etc\.|mr\.|mrs\.|ms\.|dr\.|prof\.|sr\.|jr\.|inc\.|ltd\.|co\.|corp\.|u\.s\.|u\.k\.|u\.n\.|e\.u\.|ph\.d\.|m\.d\.|b\.a\.|m\.a\.|b\.s\.|m\.s\.|vs\.|fig\.|no\.|dept\.|est\.|approx\.|jan\.|feb\.|mar\.|apr\.|jun\.|jul\.|aug\.|sep\.|sept\.|oct\.|nov\.|dec\.|al\.|st\.|ave\.|rd\.|blvd\.)/gi;
 function splitIntoSentences(text) {
   if (!text || typeof text !== "string") return [];
-  const protectedText = text.replace(ABBREVIATIONS_PATTERN, (match) => match.replace(/\./g, "\xA7DOT\xA7")).replace(/\b([A-Z])\./g, "$1\xA7DOT\xA7").replace(/(\d+)\.(\d+)/g, "$1\xA7DOT\xA7$2").replace(/(https?:\/\/[^\s]+)/g, (match) => match.replace(/\./g, "\xA7DOT\xA7"));
+  const protectedText = text.replace(ABBREVIATIONS_PATTERN, (match) => match.replace(/\./g, "\xA7DOT\xA7")).replace(/\.{3,}/g, (match) => match.replace(/\./g, "\xA7DOT\xA7")).replace(/\b([A-Z])\./g, "$1\xA7DOT\xA7").replace(/(\d+)\.(\d+)/g, "$1\xA7DOT\xA7$2").replace(/(https?:\/\/[^\s]+)/g, (match) => match.replace(/\./g, "\xA7DOT\xA7"));
   const parts = protectedText.split(/([.!?]+["')\]}]*(?:\s+|$))/g);
   const result = [];
   let current = "";
@@ -355,32 +366,37 @@ function computeTokenDiff(a, b) {
   if (midA.length > 0 && midB.length > 0) {
     const subN = midA.length;
     const subM = midB.length;
-    const matrix = Array.from({ length: subN + 1 }, () => new Array(subM + 1).fill(0));
-    for (let i2 = 1; i2 <= subN; i2++) {
-      for (let j2 = 1; j2 <= subM; j2++) {
-        if (midA[i2 - 1] === midB[j2 - 1]) {
-          matrix[i2][j2] = matrix[i2 - 1][j2 - 1] + 1;
-        } else {
-          matrix[i2][j2] = Math.max(matrix[i2 - 1][j2], matrix[i2][j2 - 1]);
+    if (subN * subM > 5e5) {
+      for (const val of midA) subDiff.push({ type: "delete", value: val });
+      for (const val of midB) subDiff.push({ type: "insert", value: val });
+    } else {
+      const matrix = Array.from({ length: subN + 1 }, () => new Array(subM + 1).fill(0));
+      for (let i2 = 1; i2 <= subN; i2++) {
+        for (let j2 = 1; j2 <= subM; j2++) {
+          if (midA[i2 - 1] === midB[j2 - 1]) {
+            matrix[i2][j2] = matrix[i2 - 1][j2 - 1] + 1;
+          } else {
+            matrix[i2][j2] = Math.max(matrix[i2 - 1][j2], matrix[i2][j2 - 1]);
+          }
         }
       }
-    }
-    let i = subN;
-    let j = subM;
-    while (i > 0 || j > 0) {
-      if (i > 0 && j > 0 && midA[i - 1] === midB[j - 1]) {
-        subDiff.push({ type: "equal", value: midA[i - 1] });
-        i--;
-        j--;
-      } else if (j > 0 && (i === 0 || matrix[i][j - 1] >= matrix[i - 1][j])) {
-        subDiff.push({ type: "insert", value: midB[j - 1] });
-        j--;
-      } else if (i > 0 && (j === 0 || matrix[i][j - 1] < matrix[i - 1][j])) {
-        subDiff.push({ type: "delete", value: midA[i - 1] });
-        i--;
+      let i = subN;
+      let j = subM;
+      while (i > 0 || j > 0) {
+        if (i > 0 && j > 0 && midA[i - 1] === midB[j - 1]) {
+          subDiff.push({ type: "equal", value: midA[i - 1] });
+          i--;
+          j--;
+        } else if (j > 0 && (i === 0 || matrix[i][j - 1] >= matrix[i - 1][j])) {
+          subDiff.push({ type: "insert", value: midB[j - 1] });
+          j--;
+        } else if (i > 0 && (j === 0 || matrix[i][j - 1] < matrix[i - 1][j])) {
+          subDiff.push({ type: "delete", value: midA[i - 1] });
+          i--;
+        }
       }
+      subDiff.reverse();
     }
-    subDiff.reverse();
   } else if (midA.length > 0) {
     for (const val of midA) subDiff.push({ type: "delete", value: val });
   } else if (midB.length > 0) {
@@ -427,11 +443,11 @@ function computeWordDiff(original = "", suggested = "") {
       originalHtml += escaped;
       suggestedHtml += escaped;
     } else if (part.type === "delete") {
-      deletions++;
+      if (/[\w'-]+/.test(part.value)) deletions++;
       inlineHtml += `<del class="diff-del">${escaped}</del>`;
       originalHtml += `<span class="diff-del-highlight">${escaped}</span>`;
     } else if (part.type === "insert") {
-      additions++;
+      if (/[\w'-]+/.test(part.value)) additions++;
       inlineHtml += `<ins class="diff-ins">${escaped}</ins>`;
       suggestedHtml += `<span class="diff-ins-highlight">${escaped}</span>`;
     }
@@ -546,7 +562,8 @@ var ReviewSession = class _ReviewSession {
     promptPresetId = "grammar_spelling",
     customPrompt = "",
     provider = "OpenRouter",
-    model = ""
+    model = "",
+    _skipInit = false
   } = {}) {
     this.sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
     this.noteUUID = noteUUID;
@@ -563,7 +580,9 @@ var ReviewSession = class _ReviewSession {
     this.currentIndex = 0;
     this.items = [];
     this.history = [];
-    this.initializeItems();
+    if (!_skipInit) {
+      this.initializeItems();
+    }
   }
   /**
    * Initializes the session items by tokenizing the original document content.
@@ -655,7 +674,7 @@ var ReviewSession = class _ReviewSession {
     item.category = metadata.category || (item.diff.hasChanges ? "Grammar & Clarity" : "No Changes Needed");
     item.confidence = metadata.confidence || "high";
     if (!item.diff.hasChanges) {
-      item.status = "accepted";
+      item.status = "no_change";
     } else {
       item.status = "suggestion_ready";
     }
@@ -749,7 +768,7 @@ var ReviewSession = class _ReviewSession {
       for (let i = 0; i < this.items.length; i++) {
         const item = this.items[i];
         let itemText = item.original;
-        if (item.status === "accepted") {
+        if (item.status === "accepted" || item.status === "no_change") {
           itemText = item.suggestion;
         } else if (item.status === "modified" && item.customEdit !== null) {
           itemText = item.customEdit;
@@ -788,7 +807,7 @@ var ReviewSession = class _ReviewSession {
       return result;
     }
     return this.items.map((item) => {
-      if (item.status === "accepted") {
+      if (item.status === "accepted" || item.status === "no_change") {
         return item.suggestion;
       } else if (item.status === "modified" && item.customEdit !== null) {
         return item.customEdit;
@@ -819,11 +838,11 @@ var ReviewSession = class _ReviewSession {
     const acceptedOnly = inspectable.filter((i) => i.status === "accepted").length;
     const modified = inspectable.filter((i) => i.status === "modified").length;
     const rejected = inspectable.filter((i) => i.status === "rejected").length;
+    const noChange = inspectable.filter((i) => i.status === "no_change").length;
     const errors = inspectable.filter((i) => i.status === "error").length;
     const suggestionReady = inspectable.filter((i) => i.status === "suggestion_ready").length;
-    const reviewed = inspectable.filter((i) => ["suggestion_ready", "accepted", "rejected", "modified"].includes(i.status)).length;
-    const decided = acceptedOnly + modified + rejected;
-    const pending = inspectable.filter((i) => i.status === "pending" || i.status === "reviewing").length;
+    const reviewed = inspectable.filter((i) => ["suggestion_ready", "accepted", "rejected", "modified", "no_change"].includes(i.status)).length;
+    const decided = acceptedOnly + modified + rejected + noChange;
     let totalAdditions = 0;
     let totalDeletions = 0;
     for (const item of this.items) {
@@ -837,6 +856,7 @@ var ReviewSession = class _ReviewSession {
       reviewed,
       decided,
       accepted: acceptedOnly + modified,
+      noChange,
       modified,
       rejected,
       suggestionReady,
@@ -865,7 +885,8 @@ var ReviewSession = class _ReviewSession {
       startedAt: this.startedAt,
       iteration: this.iteration,
       currentIndex: this.currentIndex,
-      items: this.items
+      items: this.items,
+      history: this.history
     };
   }
   /**
@@ -884,14 +905,18 @@ var ReviewSession = class _ReviewSession {
       promptPresetId: data.promptPresetId,
       customPrompt: data.customPrompt,
       provider: data.provider,
-      model: data.model
+      model: data.model,
+      _skipInit: true
     });
     session.sessionId = data.sessionId || session.sessionId;
     session.startedAt = data.startedAt || session.startedAt;
     session.iteration = data.iteration || 1;
     session.currentIndex = typeof data.currentIndex === "number" ? data.currentIndex : 0;
+    session.history = Array.isArray(data.history) ? data.history : [];
     if (Array.isArray(data.items) && data.items.length > 0) {
       session.items = data.items;
+    } else {
+      session.initializeItems();
     }
     return session;
   }
@@ -1001,7 +1026,8 @@ var OpenAIProvider = class extends BaseProvider {
     const payload = {
       model: targetModel,
       messages,
-      temperature
+      temperature,
+      max_tokens: 4096
     };
     const data = await this.sendRequest(url, {
       method: "POST",
@@ -1085,7 +1111,8 @@ var GeminiProvider = class extends BaseProvider {
         }
       ],
       generationConfig: {
-        temperature
+        temperature,
+        maxOutputTokens: 4096
       }
     };
     if (systemPrompt) {
@@ -1133,7 +1160,8 @@ var OpenRouterProvider = class extends BaseProvider {
     const payload = {
       model: targetModel,
       messages,
-      temperature
+      temperature,
+      max_tokens: 4096
     };
     const data = await this.sendRequest(url, {
       method: "POST",
@@ -1176,7 +1204,8 @@ var GroqProvider = class extends BaseProvider {
     const payload = {
       model: targetModel,
       messages,
-      temperature
+      temperature,
+      max_tokens: 4096
     };
     const data = await this.sendRequest(url, {
       method: "POST",
@@ -1217,7 +1246,8 @@ var DeepSeekProvider = class extends BaseProvider {
     const payload = {
       model: targetModel,
       messages,
-      temperature
+      temperature,
+      max_tokens: 4096
     };
     const data = await this.sendRequest(url, {
       method: "POST",
@@ -1258,7 +1288,8 @@ var MistralProvider = class extends BaseProvider {
     const payload = {
       model: targetModel,
       messages,
-      temperature
+      temperature,
+      max_tokens: 4096
     };
     const data = await this.sendRequest(url, {
       method: "POST",
@@ -1296,7 +1327,8 @@ var OllamaProvider = class extends BaseProvider {
     const payload = {
       model: targetModel,
       messages,
-      temperature
+      temperature,
+      max_tokens: 4096
     };
     const headers = {
       "Content-Type": "application/json"
@@ -1526,7 +1558,7 @@ function parseAiResponse(rawOutput, originalText = "") {
     };
   }
   const trimmed = rawOutput.trim();
-  const jsonFenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const jsonFenceMatch = trimmed.match(/`{3,}(?:json)?\s*([\s\S]*?)\s*`{3,}/i);
   const potentialJson = jsonFenceMatch ? jsonFenceMatch[1].trim() : trimmed;
   if (potentialJson.startsWith("{") && potentialJson.endsWith("}")) {
     try {
@@ -1664,7 +1696,7 @@ function getUsageStats(app) {
   memoryUsageStats = stats;
   return stats;
 }
-async function recordUsage2(app, providerName, isSuccess) {
+async function recordUsage(app, providerName, isSuccess) {
   const stats = getUsageStats(app);
   const targetProvider = providerName || PROVIDERS.OPENROUTER;
   if (!stats.providers[targetProvider]) {
@@ -1721,6 +1753,7 @@ async function resetUsage(app, mode = "today") {
 
 // anp-23-grammar-reviewer/lib/features/reviewWorkflow.js
 var isReviewAllCancelled = false;
+var reviewAllGeneration = 0;
 function cancelReviewAll() {
   isReviewAllCancelled = true;
 }
@@ -1768,7 +1801,7 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
       systemPrompt,
       model: session.model
     });
-    await recordUsage2(app, targetProvider, true);
+    await recordUsage(app, targetProvider, true);
     const parsed = parseAiResponse(aiOutput, item.original);
     session.setSuggestion(targetIdx, parsed.rewritten, {
       category: parsed.category,
@@ -1777,7 +1810,7 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
     });
     return session;
   } catch (err) {
-    await recordUsage2(app, targetProvider, false).catch(() => {
+    await recordUsage(app, targetProvider, false).catch(() => {
     });
     item.status = prevStatus === "pending" ? "error" : prevStatus;
     throw err;
@@ -1789,11 +1822,12 @@ async function handleReviewAll(app) {
     return { reviewedCount: 0, failedCount: 0, failedIndices: [], cancelled: false };
   }
   isReviewAllCancelled = false;
+  const thisGeneration = ++reviewAllGeneration;
   let reviewedCount = 0;
   let failedCount = 0;
   const failedIndices = [];
   for (let i = 0; i < session.items.length; i++) {
-    if (isReviewAllCancelled) {
+    if (isReviewAllCancelled || thisGeneration !== reviewAllGeneration) {
       console.log("[GrammarReviewer] Review All was cancelled by user.");
       break;
     }
@@ -1838,92 +1872,6 @@ function handleSetGranularity(app, newMode) {
   setActiveSession(newSession);
 }
 
-// anp-23-grammar-reviewer/lib/data/reportGenerator.js
-function generateChangesReport({ session, sourceNoteTitle, sourceNoteUUID, finalContent }) {
-  const now = /* @__PURE__ */ new Date();
-  const dateStr = now.toISOString().replace("T", " ").substring(0, 16);
-  const fullDateStr = now.toISOString().replace("T", " ").substring(0, 19) + " UTC";
-  const metrics = session.getMetrics();
-  const titleName = sourceNoteTitle || "Untitled Note";
-  const sourceLink = sourceNoteUUID ? `[${titleName}](https://www.amplenote.com/notes/${sourceNoteUUID})` : titleName;
-  const promptName = session.customPrompt ? `Custom: "${session.customPrompt}"` : `Preset: ${session.promptPresetId.replace(/_/g, " ")}`;
-  const fence = getSafeMarkdownFence(session.originalContent || "");
-  const md = `# \u{1F4DD} Grammar Review Changes: ${titleName}
-
-> **Source Note:** ${sourceLink}  
-> **Review Date:** ${fullDateStr}  
-> **AI Engine:** \`${session.provider}\` \xB7 Model: \`${session.model || "default"}\`  
-> **Granularity:** \`${session.granularity.toUpperCase()}\` \xB7 **Style:** *${promptName}*  
-> **Diff Summary:** \`+${metrics.totalAdditions} words added\`, \`-${metrics.totalDeletions} words removed\` (Accepted: **${metrics.accepted}**, Rejected: **${metrics.rejected}**)
-
----
-
-## \u{1F4CA} Summary of Changes
-
-${generateItemChangesTable(session.items)}
-
----
-
-## \u{1F4C4} Complete Revised Document
-
-${finalContent}
-
----
-
-## \u{1F4DC} Original Document Snapshot
-
-<details>
-<summary>Click to view original text before review</summary>
-
-${fence}markdown
-${session.originalContent}
-${fence}
-
-</details>
-
----
-*Generated automatically by Amplenote Grammar & Style Reviewer Plugin*
-`;
-  return {
-    name: `Grammar Changes: ${titleName} (${dateStr})`,
-    tags: [TAG_GRAMMAR_CHANGES],
-    content: md
-  };
-}
-function generateItemChangesTable(items) {
-  const inspectableItems = items.filter((i) => i.isInspectable);
-  if (inspectableItems.length === 0) {
-    return "*No inspectable items in this review pass.*";
-  }
-  const changeBlocks = inspectableItems.map((item, idx) => {
-    let statusBadge = "\u274C Kept Original";
-    let appliedText = item.original;
-    if (item.status === "accepted") {
-      statusBadge = "\u2705 Accepted";
-      appliedText = item.suggestion || item.original;
-    } else if (item.status === "modified") {
-      statusBadge = "\u270F\uFE0F Manually Edited";
-      appliedText = item.customEdit || item.suggestion || item.original;
-    }
-    return `### Item #${idx + 1} (${statusBadge} \xB7 *${item.type}*)
-- **Original Draft:**  
-  ${item.original}
-- **Applied Output:**  
-  ${appliedText}
-`;
-  }).join("\n");
-  return changeBlocks;
-}
-function getSafeMarkdownFence(content = "") {
-  if (typeof content !== "string") return "```";
-  const matches = content.match(/`{3,}/g) || [];
-  let maxLen = 2;
-  for (const m of matches) {
-    if (m.length > maxLen) maxLen = m.length;
-  }
-  return "`".repeat(maxLen + 1);
-}
-
 // anp-23-grammar-reviewer/lib/data/historyManager.js
 function generateHistoryRecord({ session, sourceNoteTitle, sourceNoteUUID, finalContent }) {
   const now = /* @__PURE__ */ new Date();
@@ -1964,7 +1912,7 @@ function generateHistoryRecord({ session, sourceNoteTitle, sourceNoteUUID, final
     finalContent
   };
   const jsonPayload = JSON.stringify(record, null, 2);
-  const fence = getSafeMarkdownFence2(jsonPayload);
+  const fence = getSafeMarkdownFence(jsonPayload);
   const markdownContent = `# \u{1F4DC} Grammar Review History: ${titleName}
 
 > **Source Note:** ${sourceLink}  
@@ -2045,7 +1993,7 @@ function parseHistoryNotes(notes = []) {
   }
   return finalRecords.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 }
-function getSafeMarkdownFence2(content = "") {
+function getSafeMarkdownFence(content = "") {
   if (typeof content !== "string") return "```";
   const matches = content.match(/`{3,}/g) || [];
   let maxLen = 2;
@@ -2053,6 +2001,83 @@ function getSafeMarkdownFence2(content = "") {
     if (m.length > maxLen) maxLen = m.length;
   }
   return "`".repeat(maxLen + 1);
+}
+
+// anp-23-grammar-reviewer/lib/data/reportGenerator.js
+function generateChangesReport({ session, sourceNoteTitle, sourceNoteUUID, finalContent }) {
+  const now = /* @__PURE__ */ new Date();
+  const dateStr = now.toISOString().replace("T", " ").substring(0, 16);
+  const fullDateStr = now.toISOString().replace("T", " ").substring(0, 19) + " UTC";
+  const metrics = session.getMetrics();
+  const titleName = sourceNoteTitle || "Untitled Note";
+  const sourceLink = sourceNoteUUID ? `[${titleName}](https://www.amplenote.com/notes/${sourceNoteUUID})` : titleName;
+  const promptName = session.customPrompt ? `Custom: "${session.customPrompt}"` : `Preset: ${session.promptPresetId.replace(/_/g, " ")}`;
+  const fence = getSafeMarkdownFence(session.originalContent || "");
+  const md = `# \u{1F4DD} Grammar Review Changes: ${titleName}
+
+> **Source Note:** ${sourceLink}  
+> **Review Date:** ${fullDateStr}  
+> **AI Engine:** \`${session.provider}\` \xB7 Model: \`${session.model || "default"}\`  
+> **Granularity:** \`${session.granularity.toUpperCase()}\` \xB7 **Style:** *${promptName}*  
+> **Diff Summary:** \`+${metrics.totalAdditions} words added\`, \`-${metrics.totalDeletions} words removed\` (Accepted: **${metrics.accepted}**, Rejected: **${metrics.rejected}**)
+
+---
+
+## \u{1F4CA} Summary of Changes
+
+${generateItemChangesTable(session.items)}
+
+---
+
+## \u{1F4C4} Complete Revised Document
+
+${finalContent}
+
+---
+
+## \u{1F4DC} Original Document Snapshot
+
+<details>
+<summary>Click to view original text before review</summary>
+
+${fence}markdown
+${session.originalContent}
+${fence}
+
+</details>
+
+---
+*Generated automatically by Amplenote Grammar & Style Reviewer Plugin*
+`;
+  return {
+    name: `Grammar Changes: ${titleName} (${dateStr})`,
+    tags: [TAG_GRAMMAR_CHANGES],
+    content: md
+  };
+}
+function generateItemChangesTable(items) {
+  const inspectableItems = items.filter((i) => i.isInspectable);
+  if (inspectableItems.length === 0) {
+    return "*No inspectable items in this review pass.*";
+  }
+  const changeBlocks = inspectableItems.map((item, idx) => {
+    let statusBadge = "\u274C Kept Original";
+    let appliedText = item.original;
+    if (item.status === "accepted") {
+      statusBadge = "\u2705 Accepted";
+      appliedText = item.suggestion || item.original;
+    } else if (item.status === "modified") {
+      statusBadge = "\u270F\uFE0F Manually Edited";
+      appliedText = item.customEdit || item.suggestion || item.original;
+    }
+    return `### Item #${idx + 1} (${statusBadge} \xB7 *${item.type}*)
+- **Original Draft:**  
+  ${item.original}
+- **Applied Output:**  
+  ${appliedText}
+`;
+  }).join("\n");
+  return changeBlocks;
 }
 
 // anp-23-grammar-reviewer/lib/features/saveHandler.js
@@ -3994,15 +4019,15 @@ function renderSidebarPanel(session, config, metrics) {
           <option value="teacher_editor" ${currentPreset === "teacher_editor" && !session?.customPrompt ? "selected" : ""}>Teacher & Coach (Clarity & Flow)</option>
         </optgroup>
         <optgroup label="Conciseness & Style">
-          <option value="concise" ${currentPreset === "concise" && !session?.customPrompt ? "selected" : ""}>Shorten & Make Concise</option>
+          <option value="concise_shorten" ${currentPreset === "concise_shorten" && !session?.customPrompt ? "selected" : ""}>Shorten & Make Concise</option>
           <option value="passive_voice" ${currentPreset === "passive_voice" && !session?.customPrompt ? "selected" : ""}>Remove Passive Voice</option>
-          <option value="adverbs" ${currentPreset === "adverbs" && !session?.customPrompt ? "selected" : ""}>Omit Unnecessary Adverbs</option>
-          <option value="flow_readability" ${currentPreset === "flow_readability" && !session?.customPrompt ? "selected" : ""}>Improve Flow & Rhythm</option>
+          <option value="omit_adverbs" ${currentPreset === "omit_adverbs" && !session?.customPrompt ? "selected" : ""}>Omit Unnecessary Adverbs</option>
+          <option value="improve_flow" ${currentPreset === "improve_flow" && !session?.customPrompt ? "selected" : ""}>Improve Flow & Rhythm</option>
         </optgroup>
         <optgroup label="Tone & Voice">
-          <option value="professional" ${currentPreset === "professional" && !session?.customPrompt ? "selected" : ""}>Professional & Business Tone</option>
-          <option value="academic" ${currentPreset === "academic" && !session?.customPrompt ? "selected" : ""}>Academic & Analytical Tone</option>
-          <option value="humorous" ${currentPreset === "humorous" && !session?.customPrompt ? "selected" : ""}>Add Subtle Humor & Wit</option>
+          <option value="professional_tone" ${currentPreset === "professional_tone" && !session?.customPrompt ? "selected" : ""}>Professional & Business Tone</option>
+          <option value="academic_clarity" ${currentPreset === "academic_clarity" && !session?.customPrompt ? "selected" : ""}>Academic & Analytical Tone</option>
+          <option value="add_humor" ${currentPreset === "add_humor" && !session?.customPrompt ? "selected" : ""}>Add Subtle Humor & Wit</option>
         </optgroup>
         <optgroup label="Custom Guidance">
           <option value="__custom__" ${session?.customPrompt ? "selected" : ""}>\u2728 Custom Prompt Override...</option>
@@ -4228,6 +4253,8 @@ function getStatusDisplayLabel(status) {
       return "\u2717 REJECTED";
     case "modified":
       return "\u270E EDITED";
+    case "no_change":
+      return "\u2713 NO CHANGES";
     case "suggestion_ready":
       return "\u25CF SUGGESTION READY";
     case "reviewing":
@@ -4246,6 +4273,8 @@ function getItemStatusIcon(status) {
       return "\u2715";
     case "modified":
       return "\u270E";
+    case "no_change":
+      return "\u2261";
     case "suggestion_ready":
       return "\u25CF";
     case "error":
@@ -4315,6 +4344,17 @@ function renderStateAwareActionButtons(item, index, canUndo) {
           \u21A9 Undo
         </button>
       ` : ""}
+      <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+        \u270F\uFE0F Edit
+      </button>
+      <button class="gr-btn btn-secondary" onclick="openReReviewDialog(${index})">
+        \u{1F504} Re-Review
+      </button>
+    `;
+  }
+  if (status === "no_change") {
+    return `
+      <span class="gr-status-pill success">\u2713 No Changes Needed</span>
       <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
         \u270F\uFE0F Edit
       </button>
@@ -4653,10 +4693,22 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       msgElem.style.display = message ? "block" : "none";
 
       const inputId = "gr-modal-active-input";
+      inputContainer.innerHTML = '';
       if (isTextarea) {
-        inputContainer.innerHTML = '<textarea id="' + inputId + '" class="gr-modal-textarea" placeholder="' + (placeholder || '') + '">' + (defaultValue || '') + '</textarea>';
+        const ta = document.createElement('textarea');
+        ta.id = inputId;
+        ta.className = 'gr-modal-textarea';
+        ta.placeholder = placeholder || '';
+        ta.value = defaultValue || '';
+        inputContainer.appendChild(ta);
       } else {
-        inputContainer.innerHTML = '<input type="text" id="' + inputId + '" class="gr-modal-input" placeholder="' + (placeholder || '') + '" value="' + (defaultValue || '') + '">';
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.id = inputId;
+        inp.className = 'gr-modal-input';
+        inp.placeholder = placeholder || '';
+        inp.value = defaultValue || '';
+        inputContainer.appendChild(inp);
       }
 
       confirmBtn.className = "gr-btn btn-primary";
@@ -6357,6 +6409,7 @@ Companion report created: ${res.changesNoteUUID}` : `Changes successfully saved 
       console.error("[GrammarReviewer] Error processing onEmbedCall:", err);
       const errorMsg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Unknown error";
       await app.alert(`Reviewer Error: ${errorMsg}`);
+      return { success: false, error: errorMsg };
     }
   },
   /**

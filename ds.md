@@ -1,853 +1,310 @@
-- on a final note, free ai providers have a limit, check the web and tell me so that I can update it,
-- also tell me how to define those limits and is it possible to track the number of requests sent totally in the settings?
-- give me steps or guidance or all data so that I can proceed implementing it.
+# 🔍 Grammar Reviewer Plugin — Code Audit Report
 
-1. create a amplenote setting to store it as it will be safe
-2. inside setting page it is
-3. is active provider required? can we just have a section on the top or bottom, and keep it collapsable, let them see it on demand, give some info as well. and yes reset todays, all stats is a nice touch
+**Plugin:** `anp-23-grammar-reviewer`  
+**Files Audited:** 22 source files across `lib/`, `grammar-reviewer.js`  
+**Date:** 2026-08-20  
 
 ---
 
-Absolutely. Here is the **full high-level progression from the start of this ANP-23 Grammar Reviewer thread**, including the audit, UX redesign, implementation, hardening, documentation, and the final AI-usage discussion.
+## 🐛 BUGS (Must Fix)
 
-## 1. Initial audit & product/UX requirements
+### BUG-1: `recordUsage` called but never imported in main entry — **Runtime crash** 🔴
 
-We started by auditing the Grammar Reviewer for:
+[grammar-reviewer.js:95](./grammar-reviewer.js#L95) and [L110](./grammar-reviewer.js#L110) call `recordUsage(app, testProv, ...)` inside the `testProviderConnection` case, but `recordUsage` is **never imported** in `grammar-reviewer.js`. The import exists only in [reviewWorkflow.js:5](./lib/features/reviewWorkflow.js#L5).
 
-* Bugs and edge cases.
-* Data/integrity risks.
-* Review-flow problems.
-* UX quality and usability.
-* Availability/configuration of **Accept, Reject, Edit, Re-Review**.
-* Whether each action had a clear objective.
-* How a **Teacher / Editor** would ideally guide a user through reviewing text.
-* Additional AI-assisted review features that would make the process feel genuinely useful.
+**Impact:** Every `testProviderConnection` call throws `ReferenceError: recordUsage is not defined`, crashing the test connection flow.
 
-The central product goal became:
-
-> Make AI review feel like a guided editorial/teaching workflow, rather than simply "AI rewrites my text."
-
----
-
-# 2. Paragraph/sentence navigation
-
-Implemented finer-grained review navigation.
-
-### Added:
-
-* Paragraph-preserving sentence reconstruction.
-* Sentence-level review without destroying the original paragraph structure.
-* Tracking of:
-
-  * `parentParagraphId`
-  * `isLastInParagraph`
-* Improved reconstruction of reviewed content.
-* Preservation of Markdown structures and lists.
-* Better sentence splitting.
-
-### Sentence tokenizer improvements
-
-Expanded protection against incorrect sentence splitting for:
-
-* Honorifics.
-* Titles.
-* Academic degrees.
-* Time units.
-* Decimal numbers.
-* URLs.
-* Other abbreviation cases.
-
-This prevented things such as:
-
-```text
-Dr. Smith
-3.14
-example.com
+```diff
+ import { getUsageStats, resetUsage } from "./lib/data/usageTracker.js";
++import { recordUsage } from "./lib/data/usageTracker.js";
 ```
 
-from being incorrectly treated as sentence boundaries.
-
----
-
-# 3. Review Navigator / Jump To
-
-Added a dedicated review-navigation toolbar.
-
-### Added:
-
-* **Jump To** selector.
-* Status indicators for review items:
-
-  * ✓ Accepted
-  * ✕ Rejected
-  * ✎ Edited
-  * ● Ready
-  * ○ Pending
-* **Prev Pending**
-* **Next Pending**
-
-This allows users to move directly between items rather than being forced through the document sequentially.
-
----
-
-# 4. Multiple Diff View modes
-
-The original Clean Prose / Inline Diff experience was expanded into **four modes**:
-
-### 1. Clean Prose
-
-Readable revised text with changes highlighted.
-
-### 2. Inline Diff
-
-GitHub-style in-place comparison using:
-
-* `<del>`
-* `<ins>`
-
-### 3. Side-by-Side
-
-Original and revised versions displayed in separate panes.
-
-### 4. Changes Only
-
-Only the actual modifications are shown:
-
-* Replacements.
-* Additions.
-* Deletions.
-* Change counts.
-
-The selected diff mode was also made persistent through:
-
-```text
-ANP_GRAMMAR_DIFF_VIEW_MODE
+Or merge into the existing import:
+```diff
+-import { getUsageStats, resetUsage } from "./lib/data/usageTracker.js";
++import { getUsageStats, resetUsage, recordUsage } from "./lib/data/usageTracker.js";
 ```
 
 ---
 
-# 5. Teacher / Editor Insights
+### BUG-2: Preset ID mismatch between constants and UI — **Silent prompt fallback** 🔴
 
-Introduced **Teacher's Insight**.
+The preset IDs defined in [constants.js](./lib/constants.js#L133-L194) (`PREBUILT_PROMPTS`) use IDs like:
+- `concise_shorten`, `omit_adverbs`, `improve_flow`, `professional_tone`, `academic_clarity`, `add_humor`
 
-AI was changed to provide structured information such as:
+But the `<option value>` attributes in [promptSelectorComponent.js:98-106](./lib/ui/promptSelectorComponent.js#L98-L106) use **different** IDs:
+- `concise`, `adverbs`, `flow_readability`, `professional`, `academic`, `humorous`
 
-```text
-rewritten
-category
-confidence
-explanation
+**Impact:** When a user selects any of these 6 presets, `getPromptPreset()` at [promptPresets.js:163](./lib/engine/promptPresets.js#L163) can't find a match and silently falls back to the first preset (`grammar_spelling`), making 6 of 10 preset choices non-functional.
+
+| UI `value` | Correct `id` in constants |
+|---|---|
+| `concise` | `concise_shorten` |
+| `adverbs` | `omit_adverbs` |
+| `flow_readability` | `improve_flow` |
+| `professional` | `professional_tone` |
+| `academic` | `academic_clarity` |
+| `humorous` | `add_humor` |
+
+**Fix:** Align the `<option value>` attributes in `promptSelectorComponent.js` with the actual `PREBUILT_PROMPTS` IDs.
+
+---
+
+### BUG-3: `onEmbedCall` catch block returns `undefined` — **Silent failure** 🟡
+
+At [grammar-reviewer.js:426-430](./grammar-reviewer.js#L426-L430), the `catch` block alerts the error but doesn't `return`, so `onEmbedCall` returns `undefined`. The embed client-side JS will receive `undefined` instead of a structured error response, likely causing downstream JS errors in the UI.
+
+```diff
+       console.error("[GrammarReviewer] Error processing onEmbedCall:", err);
+       const errorMsg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Unknown error";
+       await app.alert(`Reviewer Error: ${errorMsg}`);
++      return { success: false, error: errorMsg };
+     }
 ```
 
-Categories include things such as:
+---
 
-* Grammar.
-* Punctuation.
-* Clarity.
-* Word choice.
+### BUG-4: `setSuggestion()` pushes undo BEFORE mutation, but auto-accepts "no change" items without user consent 🟡
 
-The explanation gives the user an educational reason for the suggested change rather than simply saying:
+At [reviewSession.js:137-138](./lib/engine/reviewSession.js#L137-L141), when the AI returns text identical to the original, the item is silently set to `"accepted"`. This means the user never sees these items for review and can't reject them. While intended as an optimization, it bypasses the review flow and inflates "accepted" counts in metrics — misleading the user into thinking they approved changes they never saw.
 
-> "Here's a better sentence."
-
-AI response parsing was also made resilient to:
-
-* JSON responses.
-* Markdown code fences.
-* Plain-text fallback.
+**Recommendation:** Set to `"no_change"` status instead and count them separately in metrics.
 
 ---
 
-# 6. Review actions were clarified
+## ⚠️ EDGE CASES & INTEGRITY ISSUES
 
-The review workflow was strengthened around the four major actions:
+### EDGE-1: Paragraph reconstruction joins all items with `"\n"` — **destroys double-newline paragraph spacing** 🟡
 
-### Accept
-
-Use the AI recommendation as presented.
-
-### Reject
-
-Keep the original text.
-
-### Edit
-
-Manually modify the AI suggestion.
-
-### Re-Review
-
-Ask the AI to reconsider the item.
-
-The goal was to make each action represent a distinct editorial decision instead of having ambiguous buttons.
-
----
-
-# 7. Manual-edit workflow was expanded
-
-Manual editing received explicit reversible semantics.
-
-Added:
-
-* **✓ Accept Edit**
-* **↩ Discard Edit**
-* **✏️ Re-Edit**
-* **🔄 Review My Edit**
-
-This makes the user's own modification part of the review lifecycle instead of treating it as an uncontrolled special case.
-
----
-
-# 8. Re-Review became reason-guided
-
-Instead of simply sending an item back to the AI, Re-Review now allows the user to specify why.
-
-Presets included:
-
-* Too aggressive — preserve voice.
-* Grammar only.
-* More concise.
-* Improve clarity.
-* Custom prompt.
-
-This makes Re-Review an actual editorial instruction.
-
----
-
-# 9. Undo support
-
-Added reversible decision handling.
-
-Implemented:
-
-```text
-session.undo(index)
-session.canUndo(index)
-```
-
-and an:
-
-> ↩ Undo
-
-action.
-
-Keyboard support was also added for Undo.
-
----
-
-# 10. Review-operation progress/loading feedback
-
-Added the requested **top loading/progress indicator**.
-
-The purpose was to make it obvious that:
-
-* An API request is happening.
-* Review All is processing.
-* The user should wait.
-* The interface hasn't frozen.
-
-Also added:
-
-> **Stop Review**
-
-for Review All.
-
----
-
-# 11. Real Review All cancellation
-
-Cancellation was upgraded from UI-only behavior to actual workflow cancellation.
-
-Implemented:
-
-* `cancelActiveOperation()`
-* Cancellation checks inside the Review All loop.
-* Immediate prevention of additional background requests after cancellation.
-* Partial-failure tracking/reporting.
-
-So:
-
-```text
-Review All
-   ↓
-Item 1
-Item 2
-Item 3
-   ↓
-STOP
-   ↓
-No more API calls
-```
-
-rather than simply hiding the loading indicator while requests continue.
-
----
-
-# 12. Save integrity / stale-note protection
-
-Added a **stale note overwrite guard**.
-
-Immediately before saving, the plugin re-reads the current note content.
-
-If the note has changed externally during the review:
-
-```text
-Review started
-      ↓
-User edits note elsewhere
-      ↓
-Review completes
-      ↓
-Plugin tries to save
-      ↓
-Detect external modification
-      ↓
-Protect against accidental overwrite
-```
-
-This was one of the most important integrity fixes.
-
----
-
-# 13. Granularity-switch protection
-
-Changing between review granularities while decisions already exist was made safer.
-
-For example:
-
-```text
-Sentence
-    ↓
-Paragraph
-```
-
-when the session already contains:
-
-* Accepted items.
-* Rejected items.
-* Modified items.
-
-now produces a confirmation rather than silently invalidating existing decisions.
-
----
-
-# 14. Prompt system improvements
-
-The large collection of preset prompt buttons was redesigned into a dropdown.
-
-Grouped into:
-
-### Correction & Polish
-
-* Fix Grammar & Spelling.
-* Minimal Changes / Preserve Voice.
-* Teacher & Coach / Clarity & Flow.
-
-### Conciseness & Style
-
-* Shorten & Make Concise.
-* Remove Passive Voice.
-* Omit Unnecessary Adverbs.
-* Improve Flow & Rhythm.
-
-### Tone & Voice
-
-* Professional & Business Tone.
-* Academic & Analytical Tone.
-* Add Subtle Humor & Wit.
-
-### Custom Guidance
-
-* Custom Prompt Override.
-
-Also added a live description of the selected style.
-
----
-
-# 15. New review presets
-
-Added:
-
-### Minimal Changes — Preserve Voice
-
-Designed to make the AI less intrusive.
-
-### Teacher & Coach — Clarity & Flow
-
-Designed to make the AI more educational and explanatory.
-
----
-
-# 16. Sandbox-safe modal system
-
-A major technical issue was discovered:
-
-Amplenote embeds run inside a sandbox where native:
-
+At [reviewSession.js:286-293](./lib/engine/reviewSession.js#L286-L293), `getReconstructedContent()` for `full` and `paragraph` granularity does:
 ```js
-prompt()
-confirm()
-alert()
+return this.items.map(item => { ... }).join("\n");
 ```
 
-could be blocked.
+But the tokenizer inserts separator items for blank lines. These separators return `""` from the map, so joining with `"\n"` produces a single `\n` where the original had `\n\n`. **Paragraph breaks are collapsed into single line breaks**, mangling the document structure.
 
-This caused dead interactions.
-
-Replaced them with an in-DOM modal architecture:
-
-* `showAppPrompt()`
-* `showAppConfirm()`
-* `showAppChoice()`
-
-This fixed:
-
-* Custom Prompt.
-* Manual Edit.
-* Reset Session.
-* Delete API Key.
-* Re-Review reason selection.
-
-No native prompt/confirm/alert dependency remains in the embed.
+**Fix:** Either join with `"\n"` and ensure separator items return `"\n"`, or handle separators explicitly (as done in the sentence branch).
 
 ---
 
-# 17. Sidebar layout improvements
+### EDGE-2: `tokenizeParagraphs` doesn't handle nested/multi-tick code fences 🟡
 
-Fixed button wrapping in the sidebar.
+At [tokenizer.js:54](./lib/engine/tokenizer.js#L54), code fence detection uses `line.trim().startsWith("```")`. This will:
+1. **Incorrectly toggle** on lines like `` ````json `` (4+ backticks) — it toggles on opening but then toggles again on the closing ```` ```` ````
+2. **Fail to match** indented code fences (e.g., within blockquotes or list items)
 
-The review controls were changed to a two-column layout with:
-
-* Consistent button heights.
-* Minimum touch targets.
-* No unwanted text wrapping.
-* Better spacing.
+**Impact:** Code blocks with non-standard fencing get split into paragraphs, potentially sent to the AI for "grammar review", which would mangle code.
 
 ---
 
-# 18. Note tags in the header
+### EDGE-3: `computeTokenDiff` has O(n×m) memory for LCS matrix — potential OOM on large documents 🟡
 
-The active note's assigned tags were retrieved and displayed beside the note title.
+At [diffEngine.js:48](./lib/engine/diffEngine.js#L48), the full LCS matrix is allocated as `(subN+1) × (subM+1)`. For a 5,000-word paragraph with many changes, this creates a multi-million cell matrix.
 
-For example:
-
-```text
-My Article   #writing  #draft
-```
-
-This gives the review screen more context about the note being worked on.
-
----
-
-# 19. Expanded visual themes
-
-Expanded the theme system to **12 curated themes**.
-
-Light themes included:
-
-* Clean Daylight.
-* Sepia Parchment.
-* Sakura Blossom.
-* Matcha Latte.
-* Nord Frost.
-
-Dark themes included:
-
-* Midnight Slate.
-* Nord Arctic.
-* Glassmorphism.
-* Emerald Forest.
-* Cyber Violet.
-* Espresso Obsidian.
-* Dracula Neo.
-
----
-
-# 20. Markdown/code-fence integrity
-
-Identified a potential Markdown corruption problem where user content could itself contain long sequences of backticks.
-
-Added:
-
-```text
-getSafeMarkdownFence()
-```
-
-which dynamically creates a Markdown code fence longer than any backtick sequence contained in the user content.
-
-This was applied to report/history generation.
-
----
-
-# 21. Documentation cleanup
-
-Updated:
-
-* `README.md`
-* `CODE_DOCUMENTATION.md`
-* `DESIGN_PHILOSOPHY.md`
-* `RELEASE_NOTES.md`
-* `ds.md`
-
-Removed machine-specific/local references such as:
-
-```text
-file:///...
-C:\Users\...
-```
-
-and replaced them with portable relative references.
-
----
-
-# 22. Comprehensive scenario/integration testing
-
-Added end-to-end scenario coverage for the risky workflows.
-
-Scenarios included:
-
-* Sentence preservation.
-* Markdown structure preservation.
-* Partial API failure.
-* Mid-stream cancellation.
-* Stale-note overwrite protection.
-* Granularity switching.
-* Manual-edit workflow.
-
-This expanded the test coverage from the earlier **66 tests** to:
-
-> **78/78 passing**
-
-across:
-
-> **11/11 test suites**
-
----
-
-# 23. Static verification
-
-Ran ESLint against the project.
-
-Result:
-
-> **0 errors**
->
-> **0 warnings**
-
----
-
-# 24. Production bundle verification
-
-Ran:
-
-```text
-node esbuild.js 23
-```
-
-and successfully generated:
-
-```text
-anp-23-grammar-reviewer/build/grammar-reviewer.compiled.js
-```
-
-So the source implementation was also verified through the actual production bundling process.
-
----
-
-# 25. Final AI-provider/quota discussion
-
-After the main implementation was complete, we looked at the operational issue of **free AI provider limits**.
-
-The main conclusions were:
-
-* OpenRouter's free-plan quota should be represented as a configurable daily limit.
-* Groq limits are model/account dependent.
-* Gemini limits are model/project/tier dependent.
-* Mistral limits are dynamic.
-* Cohere has trial/free limits that should be configurable.
-* We should **not hard-code uncertain provider limits** as permanent truths.
-
----
-
-# 26. AI Usage & Limits feature was scoped
-
-We then deliberately simplified the original idea.
-
-Instead of building a complicated usage system with:
-
-* 1,000-event request ledgers.
-* Token accounting.
-* Audio dimensions.
-* Complex quota APIs.
-* Provider-specific rate-limit parsers.
-
-we settled on a lightweight system.
-
-### Store:
-
+**Recommendation:** For "full note" mode on large documents, add a guard:
 ```js
-{
-  date: "2026-08-20",
-
-  today: {
-    success: 14,
-    failed: 2
-  },
-
-  lifetime: {
-    success: 128,
-    failed: 4
-  },
-
-  providers: {
-    OpenRouter: {
-      today: { success: 12, failed: 1 },
-      lifetime: { success: 100, failed: 3 }
-    }
-  }
+if (midA.length * midB.length > 500_000) {
+  // Fallback to a simpler line-level or greedy diff
 }
 ```
 
 ---
 
-# 27. Amplenote setting for usage data
+### EDGE-4: Sentence splitter doesn't protect ellipsis (`...`) — sentences incorrectly split 🟡
 
-You decided that usage should be stored as an **Amplenote setting**, rather than introducing another storage mechanism.
+At [tokenizer.js:170](./lib/engine/tokenizer.js#L170), the split regex `([.!?]+["')\]}]*(?:\s+|$))` will split on `"..."` (ellipsis), incorrectly breaking sentences like:
 
-This gives the plugin persistent usage data without creating another complicated persistence layer.
+> `"He walked slowly... then turned around and left."`
 
----
+into two sentences at the ellipsis.
 
-# 28. Provider-wise usage tracking
-
-We decided to track usage separately for each provider.
-
-So the user can eventually see:
-
-```text
-OpenRouter     12 ✓   1 ✕
-Groq            2 ✓   0 ✕
-Gemini          5 ✓   0 ✕
-```
-
-while also having:
-
-```text
-Today
-14 requests
-
-Lifetime
-128 requests
-```
+**Fix:** Protect `...` (and `…` unicode ellipsis) before splitting, similarly to how abbreviations are protected.
 
 ---
 
-# 29. Usage UI location was finalized
+### EDGE-5: `fromJSON()` re-tokenizes then overwrites — wasted work 🟠
 
-You decided:
+At [reviewSession.js:382-401](./lib/engine/reviewSession.js#L382-L401), `fromJSON()` calls `new ReviewSession(...)` which triggers `initializeItems()` (re-tokenizing the entire document), then immediately overwrites `session.items = data.items`. The tokenization is wasted CPU.
 
-> **Inside the existing Settings page.**
-
-No new:
-
-```text
-AI Usage
-```
-
-tab.
-
-No new navigation.
+**Fix:** Skip `initializeItems()` in the restoration path, or make it lazy.
 
 ---
 
-# 30. Usage section design was finalized
+### EDGE-6: `handleSetGranularity` loses all review progress without warning 🟡
 
-You then made an important UX refinement:
+At [reviewWorkflow.js:158-176](./lib/features/reviewWorkflow.js#L158-L176), changing granularity creates a brand-new `ReviewSession`, discarding all items with their AI suggestions, accept/reject decisions, and undo history — without any confirmation prompt.
 
-### Don't show "Active Provider"
-
-There is no need for:
-
-```text
-Active: OpenRouter
-```
-
-because the usage system is provider-wide.
-
-Instead, use a collapsible:
-
-```text
-▶ 📊 AI Usage & Limits
-   14 today · 128 lifetime
-```
-
-When expanded:
-
-```text
-▼ 📊 AI Usage & Limits
-```
-
-with:
-
-* Today's requests.
-* Success/failure counts.
-* Lifetime requests.
-* Provider breakdown.
-* Configured daily limit.
-* Usage progress.
-* Reset Today's Count.
-* Reset All Statistics.
-* Brief explanatory information.
+**Recommendation:** If `metrics.reviewed > 0`, show a confirmation before resetting.
 
 ---
 
-# 31. Daily limit behavior was finalized
+### EDGE-7: Race condition in `handleReviewAll` cancellation flag 🟠
 
-Provider limits should be:
+The `isReviewAllCancelled` flag at [reviewWorkflow.js:7](./lib/features/reviewWorkflow.js#L7) is a module-level boolean. If the user triggers `reviewAll` twice rapidly, the second call resets `isReviewAllCancelled = false` on [L115](./lib/features/reviewWorkflow.js#L115), potentially un-cancelling a previous cancel request while the first loop is still running.
 
-* Configurable.
-* Used for warnings.
-* **Not hard-blocking by default.**
-
-Example:
-
-```text
-14 / 50
-██████░░░░░░░░
-```
-
-and warnings at higher percentages.
-
-The user should still be able to make a request even when the locally configured limit is reached because the plugin cannot necessarily know the provider's true account-wide usage.
+**Fix:** Use a unique `reviewAllId` (counter/token) and check against it instead of a bare boolean.
 
 ---
 
-# 32. Request-count semantics were clarified
+### EDGE-8: `isInspectableText` false negative for markdown tables and list items 🟠
 
-A request means:
-
-> **An actual AI API attempt.**
-
-Therefore:
-
-```text
-Review Item       → +1
-Review All × 10   → +10
-Re-Review         → +1
-Review My Edit    → +1
-429               → +1 request + failed
-500               → +1 request + failed
-```
-
-But:
-
-```text
-Accept
-Reject
-Edit
-Undo
-Diff switching
-Navigation
-```
-
-do **not** count as API requests.
+At [tokenizer.js:197-203](./lib/engine/tokenizer.js#L197-L203), text like `| Header |` or `- [ ] Task item` passes the check (length > 2, doesn't match thematic break). However, markdown table rows and task list items with just a checkbox marker have structural content that probably shouldn't be sent for prose review.
 
 ---
 
-# 33. Final architecture direction
+## 🏗️ CODE QUALITY & IMPROVEMENTS
 
-The final lightweight architecture became:
+### IMP-1: Duplicated `getSafeMarkdownFence` function 🟢
 
-```text
-constants.js
-    ↓
-DEFAULT_PROVIDER_LIMITS
-
-usageTracker.js
-    ↓
-persistent usage + rollover + reset
-
-reviewWorkflow.js
-    ↓
-record API attempts/results
-
-dashboardTemplate.js
-    ↓
-collapsible AI Usage & Limits
-```
-
-No over-engineered quota subsystem.
+Identical function exists in both [reportGenerator.js:113-121](./lib/data/reportGenerator.js#L113-L121) and [historyManager.js:162-170](./lib/data/historyManager.js#L162-L170). Extract to a shared utility.
 
 ---
 
-# 34. Overall final state
+### IMP-2: Metrics `pending` is calculated twice inconsistently 🟢
 
-So, from the beginning, ANP-23 evolved through roughly this progression:
+At [reviewSession.js:325-346](./lib/engine/reviewSession.js#L325-L346), `pending` is calculated on L325 as items with `"pending"` or `"reviewing"` status, but then **overridden** on L346 as `total - reviewed`. These will disagree when items are in `"error"` or `"no_change"` state. The L325 variable is completely unused (dead code).
 
-```text
-AUDIT
-  ↓
-Find bugs / integrity issues
-  ↓
-Improve review navigation
-  ↓
-Improve diff presentation
-  ↓
-Add Teacher/Editor guidance
-  ↓
-Clarify Accept / Reject / Edit / Re-Review
-  ↓
-Make Re-Review reason-driven
-  ↓
-Add Undo
-  ↓
-Add progress/loading feedback
-  ↓
-Make cancellation real
-  ↓
-Protect saves from stale notes
-  ↓
-Protect granularity changes
-  ↓
-Fix sandbox modal problems
-  ↓
-Improve prompts / presets
-  ↓
-Improve themes / visual UX
-  ↓
-Preserve Markdown safely
-  ↓
-Add integration/scenario tests
-  ↓
-Clean documentation
-  ↓
-Run ESLint
-  ↓
-Run 78-test suite
-  ↓
-Build production bundle
-  ↓
-Audit AI-provider limits
-  ↓
-Design lightweight AI Usage & Limits
-  ↓
-Provider-wise tracking
-  ↓
-Amplenote setting persistence
-  ↓
-Collapsible Settings UI
-  ↓
-Daily/lifetime statistics
-  ↓
-Reset controls
-  ↓
-Configurable soft limits
+---
+
+### IMP-3: Diff stats count tokens (including punctuation/whitespace) — not words 🟢
+
+At [diffEngine.js:131-152](./lib/engine/diffEngine.js#L131-L152), `additions` and `deletions` increment per token (including whitespace tokens and punctuation marks), but the UI labels them as "words added/removed". For example, changing `"Hello, world!"` to `"Hi, world!"` would count the comma, space, and exclamation as separate tokens if they differ.
+
+**Fix:** Filter to only count word tokens (`/[\w'-]+/` matches) in the addition/deletion counters.
+
+---
+
+### IMP-4: `parseAiResponse` regex for JSON fence doesn't handle 4+ backtick fences 🟢
+
+At [promptPresets.js:68](./lib/engine/promptPresets.js#L68), the regex `` /```(?:json)?\s*([\s\S]*?)\s*```/ `` uses a lazy match with exactly 3 backticks. If the AI returns ````json ... ```` (4 backticks) — which some models do — the regex won't match and parsing falls through to the less reliable fallback.
+
+---
+
+### IMP-5: No `max_tokens` set for most providers 🟢
+
+Only the [Anthropic provider](./lib/providers/anthropicProvider.js#L23) sets `max_tokens: 4096`. All other providers (OpenRouter, Gemini, Groq, etc.) send no output length limit. This risks:
+- Truncated responses on large documents
+- Unexpected billing on pay-per-token providers
+- Inconsistent behavior across providers
+
+**Recommendation:** Set a sensible `max_tokens` (e.g., 4096) across all OpenAI-compatible providers.
+
+---
+
+### IMP-6: Gemini API key exposed in URL query parameter 🟢
+
+At [geminiProvider.js:19](./lib/providers/geminiProvider.js#L19):
+```js
+const url = `...?key=${encodeURIComponent(this.apiKey)}`;
 ```
 
-### Final verification reached before the usage work
+While this is Google's documented pattern for their API, the key appears in URL logs, browser history, and network trace tabs. This is a known security concern for browser-based apps.
 
-**11/11 suites passing**
-**78/78 tests passing**
-**0 ESLint errors/warnings**
-**Production bundle successfully generated**
+---
 
-So the main ANP-23 audit/UX hardening phase was effectively completed, and the **AI Usage & Limits** work was the final operational enhancement we subsequently scoped.
+### IMP-7: Module-level mutable state — not safe for concurrent embeds 🟢
+
+- [`let activeTabState`](./grammar-reviewer.js#L19) in the main entry
+- [`let memorySession`](./lib/data/store.js#L5) in the store
+- [`let isReviewAllCancelled`](./lib/features/reviewWorkflow.js#L7) in the workflow
+- [`let memoryUsageStats`](./lib/data/usageTracker.js#L52) in usage tracker
+
+If Amplenote ever runs multiple embed instances of the same plugin (e.g., split panes), they'll share and corrupt each other's state. Currently acceptable for single-embed, but worth documenting as a known limitation.
+
+---
+
+### IMP-8: Hardcoded placeholder in modal input — XSS if `defaultValue` contains quotes 🟢
+
+At [dashboardTemplate.js:294-296](./lib/ui/dashboardTemplate.js#L294-L296):
+```js
+inputContainer.innerHTML = '<textarea ...' + (defaultValue || '') + '</textarea>';
+inputContainer.innerHTML = '<input ... value="' + (defaultValue || '') + '">';
+```
+
+If `defaultValue` contains `"` or `<`, this produces malformed/injectable HTML. Use `escapeHtml()` on both `placeholder` and `defaultValue` before embedding in the HTML string.
+
+---
+
+### IMP-9: `reviewSession.toJSON()` does not serialize `history` array 🟢
+
+At [reviewSession.js:356-373](./lib/engine/reviewSession.js#L356-L373), the `history` property is declared on L35 but never included in `toJSON()` or restored in `fromJSON()`. If `history` is intended for iteration snapshots, this means session restore loses all iteration history.
+
+---
+
+## 📊 SEVERITY SUMMARY
+
+| Severity | Count | Items |
+|----------|-------|-------|
+| 🔴 **Critical Bugs** | 2 | BUG-1, BUG-2 |
+| 🟡 **Moderate Bugs/Edge Cases** | 6 | BUG-3, BUG-4, EDGE-1, EDGE-2, EDGE-4, EDGE-6 |
+| 🟠 **Minor Edge Cases** | 3 | EDGE-5, EDGE-7, EDGE-8 |
+| 🟢 **Quality Improvements** | 9 | IMP-1 through IMP-9 |
+
+---
+
+> [!IMPORTANT]
+> **BUG-1** (missing `recordUsage` import) and **BUG-2** (preset ID mismatch) are the highest-priority fixes — they cause runtime crashes and silent functional breakage respectively. Both are quick fixes.
+
+---
+
+Viewed reviewSession.js:270-315
+Viewed tokenizer.js:50-110
+Viewed diffEngine.js:35-60
+Viewed diffEngine.js:40-85
+Viewed promptPresets.js:60-100
+Edited diffEngine.js
+Edited promptPresets.js
+Ran command: `node esbuild.js 23; $env:NODE_OPTIONS="--experimental-vm-modules"; npx jest anp-23-grammar-reviewer`
+Viewed diffEngine.js:40-90
+Edited diffEngine.js
+Ran command: `node esbuild.js 23; $env:NODE_OPTIONS="--experimental-vm-modules"; npx jest anp-23-grammar-reviewer`
+
+Here is the verification of every bug, edge case, and improvement listed in [`ds.md`](./ds.md):
+
+---
+
+### 🐛 Bugs (All Fixed)
+
+| Item | Description | Status | Verification Details |
+|---|---|:---:|---|
+| **BUG-1** | Missing `recordUsage` import in entry point causing crash on `testProviderConnection` | ✅ **Fixed** | Added to imports in [`grammar-reviewer.js:17`](./grammar-reviewer.js#L17). |
+| **BUG-2** | 6 of 10 prompt preset IDs mismatching UI `<option>` values | ✅ **Fixed** | Aligned all `<option value="...">` in [`promptSelectorComponent.js:98-106`](./lib/ui/promptSelectorComponent.js#L98-L106) with `PREBUILT_PROMPTS` IDs. |
+| **BUG-3** | `onEmbedCall` error catch block returning `undefined` | ✅ **Fixed** | Returns `{ success: false, error: errorMsg }` in [`grammar-reviewer.js:429`](./grammar-reviewer.js#L429). |
+| **BUG-4** | Identical AI output auto-accepted without user consent | ✅ **Fixed** | Assigned dedicated `no_change` status in [`reviewSession.js:134`](./lib/engine/reviewSession.js#L134) with unique icon (`≡`) and metrics counter. |
+
+---
+
+### ⚠️ Edge Cases & Integrity (All Addressed)
+
+| Item | Description | Status | Verification Details |
+|---|---|:---:|---|
+| **EDGE-1** | Paragraph reconstruction newline joining | ✅ **Verified** | Blank separator tokens (`{ original: "", type: "separator" }`) correctly produce `\n\n` double spacing when joined via `"\n"`. |
+| **EDGE-2** | Nested & multi-tick (4+ backtick) code fence detection | ✅ **Fixed** | Tokenizer in [`tokenizer.js:55-68`](./lib/engine/tokenizer.js#L55-L68) tracks opening fence length and closes only on matching fences. |
+| **EDGE-3** | LCS matrix memory guard on huge diffs | ✅ **Fixed** | Added safety fallback threshold (`subN * subM > 500,000`) in [`diffEngine.js:50`](./lib/engine/diffEngine.js#L50). |
+| **EDGE-4** | Ellipsis (`...`) causing false sentence splitting | ✅ **Fixed** | Multi-dot ellipses (`\.{3,}`) protected in [`tokenizer.js:163`](./lib/engine/tokenizer.js#L163). |
+| **EDGE-5** | `fromJSON` re-tokenizing before overwriting | ✅ **Fixed** | Added `_skipInit: true` flag to skip redundant tokenization in [`reviewSession.js:383`](./lib/engine/reviewSession.js#L383). |
+| **EDGE-6** | Granularity change confirmation | ✅ **Addressed** | UI resets session on demand with in-DOM confirmation. |
+| **EDGE-7** | `reviewAll` cancellation race condition | ✅ **Fixed** | Added `reviewAllGeneration` counter token in [`reviewWorkflow.js:8`](./lib/features/reviewWorkflow.js#L8). |
+| **EDGE-8** | Inspectable text checks | ✅ **Verified** | Checked against thematic breaks, short fragments, and code blocks. |
+
+---
+
+### 🏗️ Code Quality Improvements (All Addressed)
+
+| Item | Description | Status | Verification Details |
+|---|---|:---:|---|
+| **IMP-1** | Duplicated `getSafeMarkdownFence` function | ✅ **Fixed** | Deduplicated; imported from [`historyManager.js`](./lib/data/historyManager.js) into [`reportGenerator.js`](./lib/data/reportGenerator.js). |
+| **IMP-2** | Dead-code / inconsistent `pending` calculation | ✅ **Fixed** | Cleaned up in [`reviewSession.js:342`](./lib/engine/reviewSession.js#L342). |
+| **IMP-3** | Diff stats counting punctuation/whitespace as words | ✅ **Fixed** | Added `/[\\w'-]+/` word token filter in [`diffEngine.js:144-150`](./lib/engine/diffEngine.js#L144-L150). |
+| **IMP-4** | JSON fence regex for 3+ backticks | ✅ **Fixed** | Updated to `/`{3,}(?:json)?\s*([\s\S]*?)\s*`{3,}/i` in [`promptPresets.js:68`](./lib/engine/promptPresets.js#L68). |
+| **IMP-5** | Missing `max_tokens` across providers | ✅ **Fixed** | Added `max_tokens: 4096` / `maxOutputTokens: 4096` to OpenRouter, Groq, Mistral, DeepSeek, OpenAI, Ollama, and Gemini. |
+| **IMP-6** | Gemini query parameter API key | ℹ️ **Documented** | Standard Google API convention; noted in docs. |
+| **IMP-7** | Module-level state across multiple embeds | ℹ️ **Documented** | Documented as single-embed architecture. |
+| **IMP-8** | XSS risk in modal input `defaultValue` | ✅ **Fixed** | Replaced `innerHTML` concatenation with safe DOM API (`createElement`/`appendChild`) in [`dashboardTemplate.js:293-308`](./lib/ui/dashboardTemplate.js#L293-L308). |
+| **IMP-9** | `toJSON()` missing `history` array | ✅ **Fixed** | Added `history: this.history` in [`reviewSession.js:364`](./lib/engine/reviewSession.js#L364). |
+
+---
+
+### 🧪 Test & Build Status
+- **Build**: Successfully compiled to [`build/grammar-reviewer.compiled.js`](./build/grammar-reviewer.compiled.js) (0 errors).
+- **Test Suite**: **12/12 suites passed**, **86/86 unit & scenario tests passed**.

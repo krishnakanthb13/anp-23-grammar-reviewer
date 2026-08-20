@@ -53,15 +53,18 @@ graph TD
 ## 2. Core Modules
 
 ### `lib/engine/`
-- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected/modified states, assigned note tags, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence.
+- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected/modified/no_change states, assigned note tags, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence.
   - **Undo Stack**: Maintains a bounded snapshot stack (`pushUndo`, `undo`, `canUndo`) on each item for reversible decisions.
+  - **Auto-Resolved `no_change` Status**: Distinguishes items where AI detected no changes needed (`no_change`) from explicit user-accepted edits (`accepted`), keeping metrics and review flows clean.
   - **Paragraph-Preserving Sentence Reconstruction**: `getReconstructedContent()` preserves multi-line markdown structures and joins intra-paragraph sentences with spaces rather than extra newlines.
   - **Note Tags Tracking**: Persists `noteTags` string array retrieved from the note.
   - **Pending Navigation Helpers**: `getNextPendingIndex()` and `getPrevPendingIndex()` to skip reviewed chunks.
 - **`tokenizer.js`**: Breaks Markdown text into inspectable units (`full`, `paragraph`, `sentence`) while preserving empty lines, markdown code fences, headers, and bullet structures.
+  - **Nested & Multi-Tick Code Fence Tracking**: Supports arbitrary length (3, 4, 5+ backtick) code blocks without improper splitting.
   - **Parent Paragraph Tracking**: Annotates sentences with `parentParagraphId` and `isLastInParagraph` for reconstructive integrity.
-  - **Expanded Abbreviation Protections**: 40+ honorifics (`Dr.`, `Prof.`), titles (`Inc.`, `Ltd.`), time units (`min.`, `sec.`), decimals (`3.14`), and URLs to prevent improper sentence fragmentation.
+  - **Expanded Abbreviation & Ellipsis Protections**: 40+ honorifics (`Dr.`, `Prof.`), titles (`Inc.`, `Ltd.`), time units (`min.`, `sec.`), decimals (`3.14`), URLs, and multi-dot ellipses (`...`) to prevent improper sentence fragmentation.
 - **`diffEngine.js`**: Fine-grained sub-word and punctuation LCS/Myers diff algorithm with common prefix/suffix optimization.
+  - **Accurate Word Counting**: Addition and deletion statistics count alphanumeric word tokens specifically, preventing punctuation and whitespace from inflating change metrics.
   - **4 Diff Modes**: Produces `suggestedHtml` (Clean Prose), `inlineHtml` (Unified Diff), `originalHtml` (Side-by-Side), and `changesHtml` (Changes Only list).
   - **`extractChangesList(diff)`**: Extracts structured change objects (`{ type, original, suggested }`) for the Changes Only card view.
 - **`promptPresets.js`**: Pre-configured system and user prompts for tone, conciseness, flow, humor, minimal changes, and teacher/coach modes.
@@ -74,26 +77,26 @@ graph TD
   - **Provider-Wise Metrics**: Tracks success vs. failure counts for every supported provider.
 - **`store.js`**: Active memory session holder (`getActiveSession`, `setActiveSession`, `clearActiveSession`).
 - **`reportGenerator.js`**: Generates human-readable Markdown changes reports and session snapshots.
-- **`historyManager.js`**: Creates and queries structured JSON history notes tagged with `-reports/-grammar/-history`.
+- **`historyManager.js`**: Creates and queries structured JSON history notes tagged with `-reports/-grammar/-history`. Contains canonical `getSafeMarkdownFence()` utility.
 
 ### `lib/features/`
 - **`launcher.js`**: Direct 1-click fullscreen launcher that handles both note-specific reviews (`noteOption`) and cross-note dashboard opening (`appOption`), automatically navigating to the fullscreen plugin view (`https://www.amplenote.com/notes/plugins/${pluginUUID}`) while preserving clean empty-state fallback when no note is active.
-- **`reviewWorkflow.js`**: AI completion runner with cancellation support (`cancelReviewAll`), transient item reviewing states, and re-review prompt overrides.
+- **`reviewWorkflow.js`**: AI completion runner with generation-tracked cancellation support (`cancelReviewAll`), transient item reviewing states, and re-review prompt overrides.
 - **`saveHandler.js`**: Overwrites source note directly with note UUID validation and error handling; includes a concurrency guard that checks `app.getNoteContent()` to prevent overwriting stale externally modified notes. Optionally generates companion audit notes.
 - **`historyViewer.js`**: Multi-query history fetcher querying and deduplicating past review sessions.
 
 ### `lib/providers/`
-- **`baseProvider.js`**: Abstract base class enforcing standard `complete({ prompt, systemPrompt, model })` signature with localhost/CORS error extraction and timeout controls.
+- **`baseProvider.js`**: Abstract base class enforcing standard `complete({ prompt, systemPrompt, model })` signature with localhost/CORS error extraction, 4096-token upper bounds, and timeout controls.
 - **`providerRegistry.js`**: Factory instantiating adapters for **OpenRouter, Gemini, Groq, Mistral, DeepSeek, Ollama, OpenAI, and Anthropic**. Extracts per-provider keys and model maps (JSON dictionary) via safe, resilient parsing without requiring extra setting rows.
 
 ### `lib/ui/`
 - **`dashboardTemplate.js`**: Renders the complete HTML shell with embedded client-side routing (`Reviewer`, `History Logs`, `Settings`), top operation loader bar (`.gr-top-loader`), live operation banner, note tag pills, keyboard shortcuts (`A`, `R`, `U`, `N`/`P`, `T`), 12-theme dynamic cycler, and synchronized dual-pane scroll locks.
-  - **In-DOM Modal Dialog Architecture**: Replaces browser-native `prompt()` and `confirm()` with sandboxed-safe in-DOM dialog components (`showAppPrompt`, `showAppConfirm`, `showAppChoice`, `closeAppModal`) to eliminate iframe dead clicks.
+  - **In-DOM Modal Dialog Architecture**: Replaces browser-native `prompt()` and `confirm()` with sandboxed-safe in-DOM dialog components (`showAppPrompt`, `showAppConfirm`, `showAppChoice`, `closeAppModal`) utilizing safe DOM API nodes to eliminate iframe dead clicks and XSS vulnerabilities.
 - **`diffViewComponent.js`**:
-  - **Review Navigator**: Jump-to item dropdown with status badges (`✓`, `✕`, `✎`, `●`, `○`) and pending navigation buttons.
+  - **Review Navigator**: Jump-to item dropdown with status badges (`✓`, `≡`, `✕`, `✎`, `●`, `○`) and pending navigation buttons.
   - **4 Diff View Modes**: Segmented toggle buttons (`✨ Clean Prose`, `🔀 Inline Diff`, `👥 Side-by-Side`, `📋 Changes Only`).
   - **Teacher's Insight Box**: Explanations, category tags (Grammar, Clarity, Word Choice), and confidence indicators.
-  - **State-Aware Action Buttons**: Contextual button groups per state (`pending`, `suggestion_ready`, `accepted`, `rejected`, `modified`) with reversible `↩ Undo`.
+  - **State-Aware Action Buttons**: Contextual button groups per state (`pending`, `suggestion_ready`, `accepted`, `no_change`, `rejected`, `modified`) with reversible `↩ Undo`.
 - **`promptSelectorComponent.js`**: Left sidebar control panel rendering active AI engine & model dropdown (filtered to saved providers), granularity segmented pills, categorized prompt style dropdown with `<optgroup>`s and description badge, pending count badge (`⚡ All Pending (N)`), and live progress metrics.
 - **`styles.css.js`**: High-performance CSS engine providing a 100% full-width 2-column workbench layout (`.gr-workbench`), 12 complete themes (5 light, 7 dark), in-DOM modal overlay animations, fluid scrollbars, and diff highlights.
 
