@@ -32,9 +32,9 @@ AI should help users become better writers, not just replace their words:
 ## 6. Fast Focused Review & Spatial Clarity
 Note editing requires generous visual real estate and rapid navigation:
 - **Review Navigator**: Direct jumping to any item with live status badges (`✓`, `✕`, `✎`, `●`, `○`), plus skip-to-pending buttons (`⏮ Prev Pending` / `Next Pending ⏭`).
-- **Top Operation Indicator**: Live animated progress bar and cancellation banner keep long reviews transparent.
-- **100% Full-Width Workbench**: All controls reside in a compact Left Control Sidebar, allowing diffs to occupy the full viewport width.
-- **Zero-Flicker Reactivity**: Tabs, themes, diff modes, provider dropdowns, active model selectors, and prompt presets update entirely within the client DOM with **0ms latency**, never forcing full iframe re-renders or white flashes.
+- **Floating Toast Indicator**: Live animated progress bar and floating toast notification banner keep long reviews transparent without shifting or bouncing the document layout.
+- **100% Full-Width Workbench**: All controls reside in an ergonomic Left Control Sidebar (AI Engine ➔ Granularity ➔ Prompt Style ➔ Review Action ➔ Progress), allowing diffs to occupy the full viewport width.
+- **Zero-Flicker Reactivity**: Tabs, themes, diff modes, provider dropdowns, active model selectors, prompt presets, and review cards update entirely within targeted client DOM elements with **0ms latency**, never forcing full iframe re-renders or white flashes.
 
 ## 7. Clean Notebook First (Leverage Native Platform Powers)
 Avoid polluting the user's workspace with unnecessary files:

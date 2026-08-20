@@ -1,5 +1,15 @@
 # Release Notes: Amplenote Grammar & Style Reviewer
 
+## v0.0.9 (2026-08-20)
+
+### 🚀 Major Enhancements & Flicker Elimination
+- **Ergonomic Sidebar Action Placement**: Moved the `Review Chunk` and `⚡ All Pending` action buttons below the `PROMPT STYLE` section, creating a natural top-to-bottom configuration flow (AI Engine ➔ Granularity ➔ Prompt Style ➔ Review).
+- **Zero-Flicker Floating Toast Banner**: Replaced the inline operation banner with a fixed floating top pill/toast (`.gr-op-banner`), completely eliminating the 35px page jump/layout shift when initiating AI reviews.
+- **Targeted In-Place DOM Swapping**: Review runs, accept/reject, undo, and item navigation now update only the `#main-canvas-container` and `#sidebar-progress-container`, keeping the sidebar dropdowns and form inputs permanently mounted with zero flicker or scroll jumps.
+- **Settings Key Input Formatting Fix**: Restored vertical column flexbox layout in the Settings tab, properly separating key labels, status preview banners, full-width password inputs, and action buttons.
+- **Modal Window Enlarge & Full-Screen Editing**: Added a dedicated `⛶` / `🗗` maximize toggle button in the modal dialog header. Text editing modals (`Manual Edit` and `+ Custom Prompt`) open in a generous wide layout (`820px`) and expand on demand to utilize the full screen (`calc(100vw - 36px)` / `calc(100vh - 36px)`) with auto-expanding multiline textareas.
+- **Distinct 4 Diff View Modes**: Differentiated `✨ Clean Prose` (100% full-width reading view without strikethroughs) from `👥 Side-by-Side` (dual synchronized comparison with original strikethroughs and suggestion highlights).
+
 ## v0.0.8 (2026-08-20)
 
 ### 🚀 Major Enhancements & Sandboxing Fixes

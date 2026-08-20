@@ -12,7 +12,7 @@ import { launchReviewer } from "./lib/features/launcher.js";
 import { handleRunReview, handleReviewAll, handleSetGranularity, cancelReviewAll } from "./lib/features/reviewWorkflow.js";
 import { handleSaveAndCommit } from "./lib/features/saveHandler.js";
 import { loadHistoryRecords } from "./lib/features/historyViewer.js";
-import { buildDashboardTemplate } from "./lib/ui/dashboardTemplate.js";
+import { buildDashboardTemplate, renderReviewWorkspace } from "./lib/ui/dashboardTemplate.js";
 import { DEFAULT_MODELS, DEFAULT_PROVIDER } from "./lib/constants.js";
 
 let activeTabState = "review";
@@ -61,12 +61,11 @@ const plugin = {
     const session = getActiveSession();
 
     try {
-      let requiresReRender = true;
+      let requiresReRender = false;
 
       switch (action) {
         case "selectNote":
           await launchReviewer(app, null, true);
-          requiresReRender = false;
           break;
 
         case "restoreSession": {
@@ -76,12 +75,12 @@ const plugin = {
               setActiveSession(restored);
             }
           }
-          requiresReRender = false;
           break;
         }
 
         case "clearSession":
           clearActiveSession();
+          requiresReRender = true;
           break;
 
         case "refreshHistory":
@@ -312,7 +311,7 @@ const plugin = {
           console.warn("[GrammarReviewer] Unhandled action:", action);
       }
 
-      // Only re-render embed when session state has actually mutated
+      // Only re-render full embed on explicit tab changes or session resets
       if (requiresReRender) {
         if (app.context && typeof app.context.renderEmbed === "function") {
           await app.context.renderEmbed();
@@ -320,6 +319,20 @@ const plugin = {
           await app.renderEmbed();
         }
       }
+
+      const activeSession = getActiveSession();
+      if (activeSession) {
+        const config = getProviderConfig(app);
+        const metrics = activeSession.getMetrics();
+        const currentItem = activeSession.items[activeSession.currentIndex] || null;
+        return {
+          success: true,
+          session: activeSession.toJSON(),
+          workspaceHtml: renderReviewWorkspace(activeSession, config, metrics, currentItem)
+        };
+      }
+
+      return { success: true };
     } catch (err) {
       console.error("[GrammarReviewer] Error processing onEmbedCall:", err);
       const errorMsg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Unknown error";

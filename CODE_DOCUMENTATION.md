@@ -106,6 +106,8 @@ graph TD
    - `app.settings["Custom AI Model"]` stores a clean JSON dictionary `{ [provider]: model }` allowing independent model memory per provider without modifying the note settings table schema.
 7. **Zero-Flicker Client-Side Configuration Updates**:
    - Left sidebar controls (`setProvider`, `setModel`, `setPreset`, `setCustomPrompt`, `clearCustomPrompt`) execute in-DOM UI state updates instantaneously with 0ms latency and notify the host in the background with `requiresReRender = false`, preventing unnecessary iframe rebuilds and eliminating screen flashing.
+8. **Targeted In-Place Canvas & Progress DOM Swapping**:
+   - Review runs, accept/reject, undo, and item navigation update `#main-canvas-container` and `#sidebar-progress-container` directly in-place, keeping sidebar inputs and dropdowns permanently mounted without destruction. Floating toast indicator (`.gr-op-banner`) displays operation progress without layout shifting.
 
 ---
 

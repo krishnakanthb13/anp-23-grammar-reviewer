@@ -1961,18 +1961,18 @@ var EMBED_STYLES = `
   --bg-secondary: #2e3440;
   --bg-card: #3b4252;
   --bg-card-hover: #434c5e;
-  --border-color: rgba(255, 255, 255, 0.1);
-  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-color: rgba(255, 255, 255, 0.12);
+  --border-subtle: rgba(255, 255, 255, 0.07);
   --border-active: #88c0d0;
-  --text-primary: #eceff4;
+  --text-primary: #f8fafc;
   --text-secondary: #d8dee9;
-  --text-muted: #9aa8be;
+  --text-muted: #a3b1c6;
   --accent-primary: #88c0d0;
   --accent-hover: #81a1c1;
   --accent-success: #a3be8c;
   --accent-success-bg: rgba(163, 190, 140, 0.2);
-  --accent-danger: #bf616a;
-  --accent-danger-bg: rgba(191, 97, 106, 0.2);
+  --accent-danger: #e06c75;
+  --accent-danger-bg: rgba(224, 108, 117, 0.2);
   --accent-warning: #ebcb8b;
   --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
@@ -1983,18 +1983,18 @@ var EMBED_STYLES = `
   --bg-secondary: #16203a;
   --bg-card: #1e2c4f;
   --bg-card-hover: #293a62;
-  --border-color: rgba(56, 189, 248, 0.15);
-  --border-subtle: rgba(56, 189, 248, 0.08);
+  --border-color: rgba(56, 189, 248, 0.18);
+  --border-subtle: rgba(56, 189, 248, 0.09);
   --border-active: #38bdf8;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
+  --text-primary: #ffffff;
+  --text-secondary: #e2e8f0;
   --text-muted: #94a3b8;
   --accent-primary: #38bdf8;
   --accent-hover: #0ea5e9;
   --accent-success: #34d399;
-  --accent-success-bg: rgba(52, 211, 153, 0.2);
+  --accent-success-bg: rgba(52, 211, 153, 0.22);
   --accent-danger: #fb7185;
-  --accent-danger-bg: rgba(251, 113, 133, 0.2);
+  --accent-danger-bg: rgba(251, 113, 133, 0.22);
   --accent-warning: #facc15;
   --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 }
@@ -2005,14 +2005,14 @@ var EMBED_STYLES = `
   --bg-secondary: #0b2e23;
   --bg-card: #124334;
   --bg-card-hover: #185442;
-  --border-color: rgba(52, 211, 153, 0.15);
-  --border-subtle: rgba(52, 211, 153, 0.08);
+  --border-color: rgba(52, 211, 153, 0.18);
+  --border-subtle: rgba(52, 211, 153, 0.09);
   --border-active: #10b981;
-  --text-primary: #ecfdf5;
-  --text-secondary: #a7f3d0;
-  --text-muted: #6ee7b7;
-  --accent-primary: #10b981;
-  --accent-hover: #059669;
+  --text-primary: #f0fdf4;
+  --text-secondary: #bbf7d0;
+  --text-muted: #86efac;
+  --accent-primary: #34d399;
+  --accent-hover: #10b981;
   --accent-success: #34d399;
   --accent-success-bg: rgba(52, 211, 153, 0.25);
   --accent-danger: #f87171;
@@ -2027,18 +2027,18 @@ var EMBED_STYLES = `
   --bg-secondary: #1a102f;
   --bg-card: #271947;
   --bg-card-hover: #352260;
-  --border-color: rgba(168, 85, 247, 0.2);
-  --border-subtle: rgba(168, 85, 247, 0.1);
-  --border-active: #a855f7;
-  --text-primary: #faf5ff;
-  --text-secondary: #e9d5ff;
-  --text-muted: #c084fc;
-  --accent-primary: #a855f7;
-  --accent-hover: #9333ea;
+  --border-color: rgba(168, 85, 247, 0.22);
+  --border-subtle: rgba(168, 85, 247, 0.11);
+  --border-active: #c084fc;
+  --text-primary: #ffffff;
+  --text-secondary: #f3e8ff;
+  --text-muted: #d8b4fe;
+  --accent-primary: #c084fc;
+  --accent-hover: #a855f7;
   --accent-success: #4ade80;
   --accent-success-bg: rgba(74, 222, 128, 0.2);
-  --accent-danger: #f43f5e;
-  --accent-danger-bg: rgba(244, 63, 94, 0.2);
+  --accent-danger: #fb7185;
+  --accent-danger-bg: rgba(251, 113, 133, 0.2);
   --accent-warning: #fbbf24;
   --card-shadow: 0 4px 24px rgba(168, 85, 247, 0.2);
 }
@@ -2049,12 +2049,12 @@ var EMBED_STYLES = `
   --bg-secondary: #1f1812;
   --bg-card: #2c221a;
   --bg-card-hover: #3b2e23;
-  --border-color: rgba(245, 158, 11, 0.15);
-  --border-subtle: rgba(245, 158, 11, 0.08);
+  --border-color: rgba(245, 158, 11, 0.18);
+  --border-subtle: rgba(245, 158, 11, 0.09);
   --border-active: #f59e0b;
-  --text-primary: #fef3c7;
-  --text-secondary: #d4b996;
-  --text-muted: #a3886b;
+  --text-primary: #fffbeb;
+  --text-secondary: #e2cca9;
+  --text-muted: #bfa07e;
   --accent-primary: #f59e0b;
   --accent-hover: #d97706;
   --accent-success: #34d399;
@@ -2071,12 +2071,12 @@ var EMBED_STYLES = `
   --bg-secondary: #282a36;
   --bg-card: #343746;
   --bg-card-hover: #44475a;
-  --border-color: rgba(189, 147, 249, 0.2);
-  --border-subtle: rgba(189, 147, 249, 0.1);
+  --border-color: rgba(189, 147, 249, 0.22);
+  --border-subtle: rgba(189, 147, 249, 0.11);
   --border-active: #ff79c6;
-  --text-primary: #f8f8f2;
-  --text-secondary: #bd93f9;
-  --text-muted: #6272a4;
+  --text-primary: #ffffff;
+  --text-secondary: #d8b4fe;
+  --text-muted: #95a5c5;
   --accent-primary: #8be9fd;
   --accent-hover: #ff79c6;
   --accent-success: #50fa7b;
@@ -2093,12 +2093,12 @@ var EMBED_STYLES = `
   --bg-secondary: #ffffff;
   --bg-card: #f1f5f9;
   --bg-card-hover: #e2e8f0;
-  --border-color: #e2e8f0;
-  --border-subtle: #f1f5f9;
+  --border-color: #cbd5e1;
+  --border-subtle: #e2e8f0;
   --border-active: #2563eb;
   --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-secondary: #334155;
+  --text-muted: #55657d;
   --accent-primary: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-success: #059669;
@@ -2116,19 +2116,19 @@ var EMBED_STYLES = `
   --bg-secondary: #f4ede0;
   --bg-card: #eae1d0;
   --bg-card-hover: #dfd4c0;
-  --border-color: #dcd0bc;
-  --border-subtle: #eadecb;
+  --border-color: #c9bca6;
+  --border-subtle: #dbceb9;
   --border-active: #b45309;
   --text-primary: #2d2319;
   --text-secondary: #5f4b39;
-  --text-muted: #8b735c;
+  --text-muted: #785f49;
   --accent-primary: #b45309;
   --accent-hover: #92400e;
   --accent-success: #15803d;
   --accent-success-bg: rgba(21, 128, 61, 0.15);
   --accent-danger: #b91c1c;
   --accent-danger-bg: rgba(185, 28, 28, 0.12);
-  --accent-warning: #d97706;
+  --accent-warning: #b45309;
   --card-shadow: 0 2px 12px rgba(95, 75, 57, 0.08);
   --btn-shadow: 0 1px 3px rgba(95, 75, 57, 0.06);
 }
@@ -2139,19 +2139,19 @@ var EMBED_STYLES = `
   --bg-secondary: #ffedf2;
   --bg-card: #fde2e8;
   --bg-card-hover: #fbcad5;
-  --border-color: #f9c2cf;
-  --border-subtle: #fde2e8;
+  --border-color: #f4abbc;
+  --border-subtle: #f9c2cf;
   --border-active: #e11d48;
   --text-primary: #37121c;
   --text-secondary: #6e2c3e;
-  --text-muted: #9e4b62;
+  --text-muted: #8c3b52;
   --accent-primary: #e11d48;
   --accent-hover: #be123c;
   --accent-success: #059669;
   --accent-success-bg: rgba(5, 150, 105, 0.15);
-  --accent-danger: #e11d48;
-  --accent-danger-bg: rgba(225, 29, 72, 0.12);
-  --accent-warning: #d97706;
+  --accent-danger: #b91c1c;
+  --accent-danger-bg: rgba(185, 28, 28, 0.12);
+  --accent-warning: #b45309;
   --card-shadow: 0 2px 14px rgba(225, 29, 72, 0.08);
   --btn-shadow: 0 1px 3px rgba(225, 29, 72, 0.06);
 }
@@ -2162,18 +2162,18 @@ var EMBED_STYLES = `
   --bg-secondary: #edf2eb;
   --bg-card: #dce6d8;
   --bg-card-hover: #cddbc8;
-  --border-color: #cbd8c5;
-  --border-subtle: #dce6d8;
+  --border-color: #b8c9b1;
+  --border-subtle: #cbd8c5;
   --border-active: #15803d;
   --text-primary: #17281c;
-  --text-secondary: #36503c;
-  --text-muted: #57735e;
+  --text-secondary: #2f4935;
+  --text-muted: #4e6b54;
   --accent-primary: #15803d;
   --accent-hover: #166534;
   --accent-success: #15803d;
   --accent-success-bg: rgba(21, 128, 61, 0.15);
-  --accent-danger: #dc2626;
-  --accent-danger-bg: rgba(220, 38, 38, 0.12);
+  --accent-danger: #b91c1c;
+  --accent-danger-bg: rgba(185, 28, 28, 0.12);
   --accent-warning: #b45309;
   --card-shadow: 0 2px 12px rgba(23, 40, 28, 0.08);
   --btn-shadow: 0 1px 3px rgba(23, 40, 28, 0.06);
@@ -2185,19 +2185,19 @@ var EMBED_STYLES = `
   --bg-secondary: #e9edf2;
   --bg-card: #dce3eb;
   --bg-card-hover: #cbd5e1;
-  --border-color: #cbd5e1;
-  --border-subtle: #dce3eb;
+  --border-color: #b3c2d4;
+  --border-subtle: #cbd5e1;
   --border-active: #0284c7;
-  --text-primary: #1e293b;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #55657d;
   --accent-primary: #0284c7;
   --accent-hover: #0369a1;
   --accent-success: #059669;
   --accent-success-bg: rgba(5, 150, 105, 0.15);
-  --accent-danger: #e11d48;
-  --accent-danger-bg: rgba(225, 29, 72, 0.12);
-  --accent-warning: #d97706;
+  --accent-danger: #b91c1c;
+  --accent-danger-bg: rgba(185, 28, 28, 0.12);
+  --accent-warning: #b45309;
   --card-shadow: 0 2px 12px rgba(30, 41, 59, 0.08);
   --btn-shadow: 0 1px 3px rgba(30, 41, 59, 0.05);
 }
@@ -2661,8 +2661,8 @@ kbd {
   font-family: var(--font-sans);
 }
 
-.badge-pending { background: #475569; color: #f8fafc; }
-.badge-suggestion_ready { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+.badge-pending { background: var(--bg-card-hover); color: var(--text-primary); border: 1px solid var(--border-color); }
+.badge-suggestion_ready { background: rgba(59, 130, 246, 0.15); color: var(--accent-primary); border: 1px solid rgba(59, 130, 246, 0.3); }
 .badge-accepted { background: var(--accent-success-bg); color: var(--accent-success); border: 1px solid rgba(16,185,129,0.3); }
 .badge-rejected { background: var(--accent-danger-bg); color: var(--accent-danger); border: 1px solid rgba(239,68,68,0.3); }
 .badge-modified { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); border: 1px solid rgba(245, 158, 11, 0.3); }
@@ -2674,7 +2674,7 @@ kbd {
   justify-content: space-between;
   align-items: center;
   padding: 8px 16px;
-  background: rgba(0, 0, 0, 0.08);
+  background: var(--bg-card);
   border-bottom: 1px solid var(--border-color);
   flex-wrap: wrap;
   gap: 8px;
@@ -2710,7 +2710,7 @@ kbd {
 .gr-pane-title {
   font-size: 11px;
   font-weight: 700;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.6px;
   display: flex;
@@ -2724,6 +2724,7 @@ kbd {
   border: 1px solid var(--border-color);
   font-size: 14px;
   font-family: var(--font-sans);
+  color: var(--text-primary);
   white-space: pre-wrap;
   min-height: 380px;
   height: calc(100vh - 350px);
@@ -2736,7 +2737,7 @@ kbd {
 /* Side-by-Side Dual Highlighting */
 .diff-del-highlight {
   background: var(--accent-danger-bg);
-  color: #f87171;
+  color: var(--accent-danger);
   text-decoration: line-through;
   padding: 1px 4px;
   border-radius: 3px;
@@ -2747,7 +2748,7 @@ kbd {
 
 .diff-ins-highlight {
   background: var(--accent-success-bg);
-  color: #34d399;
+  color: var(--accent-success);
   text-decoration: none;
   padding: 1px 4px;
   border-radius: 3px;
@@ -2759,7 +2760,7 @@ kbd {
 /* Inline Diff Highlighting */
 .diff-del {
   background: var(--accent-danger-bg);
-  color: #f87171;
+  color: var(--accent-danger);
   text-decoration: line-through;
   padding: 1px 4px;
   border-radius: 3px;
@@ -2768,7 +2769,7 @@ kbd {
 
 .diff-ins {
   background: var(--accent-success-bg);
-  color: #34d399;
+  color: var(--accent-success);
   text-decoration: none;
   padding: 1px 4px;
   border-radius: 3px;
@@ -2834,12 +2835,12 @@ kbd {
   border-radius: 4px;
 }
 
-.badge-replace { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
-.badge-delete { background: var(--accent-danger-bg); color: #f87171; }
-.badge-insert { background: var(--accent-success-bg); color: #34d399; }
+.badge-replace { background: rgba(59, 130, 246, 0.15); color: var(--accent-primary); }
+.badge-delete { background: var(--accent-danger-bg); color: var(--accent-danger); }
+.badge-insert { background: var(--accent-success-bg); color: var(--accent-success); }
 
 .gr-change-del {
-  color: #f87171;
+  color: var(--accent-danger);
   text-decoration: line-through;
   font-family: var(--font-sans);
 }
@@ -2850,7 +2851,7 @@ kbd {
 }
 
 .gr-change-ins {
-  color: #34d399;
+  color: var(--accent-success);
   font-weight: 600;
   font-family: var(--font-sans);
 }
@@ -2865,8 +2866,8 @@ kbd {
 
 /* Teacher's Insight Box */
 .gr-teacher-insight-box {
-  background: rgba(59, 130, 246, 0.06);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: 10px 14px;
   margin: 0 16px 12px 16px;
@@ -2903,7 +2904,8 @@ kbd {
 
 .gr-teacher-body {
   font-size: 12.5px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+  opacity: 0.92;
   line-height: 1.45;
 }
 
@@ -2972,18 +2974,31 @@ kbd {
 }
 
 .gr-op-banner {
-  background: rgba(59, 130, 246, 0.12);
-  border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+  position: fixed;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-120%);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-active);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   color: var(--text-primary);
-  font-size: 12px;
-  padding: 6px 16px;
-  display: none;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 18px;
+  border-radius: var(--radius-md);
+  z-index: 9998;
+  display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
 }
 
 .gr-op-banner.active {
-  display: flex;
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
 }
 
 /* Status Pills */
@@ -3199,8 +3214,34 @@ kbd {
   padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   box-shadow: var(--card-shadow);
+}
+
+.gr-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.gr-form-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+
+.gr-form-help {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.gr-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.85;
 }
 /* Tag Pills */
 .gr-tag-pill {
@@ -3238,54 +3279,127 @@ kbd {
   border-radius: var(--radius-md);
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
   width: 100%;
-  max-width: 520px;
+  max-width: 540px;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), max-height 0.22s cubic-bezier(0.16, 1, 0.3, 1), width 0.22s cubic-bezier(0.16, 1, 0.3, 1), height 0.22s cubic-bezier(0.16, 1, 0.3, 1);
   animation: modalSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+.gr-modal-box.gr-modal-large {
+  max-width: 820px;
+  max-height: 88vh;
+}
+
+/* Full Minus A Little Screen Enlarged View */
+.gr-modal-box.enlarged {
+  max-width: calc(100vw - 36px) !important;
+  width: calc(100vw - 36px) !important;
+  max-height: calc(100vh - 36px) !important;
+  height: calc(100vh - 36px) !important;
+  border-radius: var(--radius-sm);
+}
+
 @keyframes modalSlideUp {
   from { transform: translateY(20px) scale(0.97); opacity: 0; }
   to { transform: translateY(0) scale(1); opacity: 1; }
 }
+
 .gr-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 18px;
+  padding: 13px 18px;
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-card);
 }
+
 .gr-modal-title {
   font-size: 14.5px;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
 }
-.gr-modal-close {
-  background: none;
-  border: none;
+
+.gr-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gr-modal-enlarge-btn {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   color: var(--text-secondary);
   cursor: pointer;
-  font-size: 16px;
-  padding: 4px 8px;
+  font-size: 14px;
+  padding: 5px 9px;
   border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  line-height: 1;
 }
-.gr-modal-close:hover {
+
+.gr-modal-enlarge-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-card);
+  background: var(--bg-card-hover);
+  border-color: var(--border-active);
+  transform: scale(1.05);
 }
+
+.gr-modal-close {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  padding: 5px 9px;
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.gr-modal-close:hover {
+  color: var(--accent-danger);
+  background: var(--bg-card-hover);
+  border-color: var(--accent-danger);
+}
+
 .gr-modal-body {
   padding: 18px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
+
+.gr-modal-box.enlarged .gr-modal-body {
+  height: 100%;
+}
+
+.gr-modal-box.enlarged #gr-modal-input-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .gr-modal-message {
   font-size: 12.5px;
   color: var(--text-secondary);
   line-height: 1.45;
   margin: 0;
 }
+
 .gr-modal-input {
   width: 100%;
   padding: 10px 12px;
@@ -3297,26 +3411,41 @@ kbd {
   font-family: inherit;
   outline: none;
 }
+
 .gr-modal-input:focus {
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 2px var(--accent-hover);
 }
+
 .gr-modal-textarea {
   width: 100%;
-  min-height: 110px;
-  padding: 10px 12px;
-  font-size: 12.5px;
+  min-height: 160px;
+  max-height: 60vh;
+  padding: 12px 14px;
+  font-size: 13.5px;
   background: var(--bg-primary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  font-family: inherit;
+  font-family: var(--font-sans);
   resize: vertical;
   outline: none;
-  line-height: 1.45;
+  line-height: 1.6;
+  transition: border-color 0.15s ease;
 }
+
 .gr-modal-textarea:focus {
   border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-hover);
+}
+
+.gr-modal-box.enlarged .gr-modal-textarea {
+  flex: 1;
+  min-height: 380px;
+  max-height: none;
+  height: 100%;
+  font-size: 14.5px;
+  line-height: 1.65;
 }
 .gr-modal-radio-list {
   display: flex;
@@ -3421,15 +3550,6 @@ function renderSidebarPanel(session, config, metrics) {
           </select>
         </div>
       </div>
-
-      <div class="gr-sidebar-btn-row">
-        <button class="gr-btn btn-primary" title="Review active chunk" onclick="sendAction('runReview')">
-          ${reviewBtnLabel}
-        </button>
-        <button class="gr-btn btn-secondary" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
-          \u26A1 All Pending ${pendingCount > 0 ? `(${pendingCount})` : ""}
-        </button>
-      </div>
     </div>
 
     <!-- Section 2: Granularity Mode -->
@@ -3437,7 +3557,7 @@ function renderSidebarPanel(session, config, metrics) {
       <div class="gr-sidebar-header">
         <span class="gr-section-title">GRANULARITY</span>
       </div>
-      <div class="gr-segmented-control">
+      <div class="gr-segmented-control" id="granularity-segmented-control">
         <button id="granularity-btn-full" class="gr-segment-btn ${currentGranularity === "full" ? "active" : ""}" onclick="handleGranularityChange('full')">Full Note</button>
         <button id="granularity-btn-paragraph" class="gr-segment-btn ${currentGranularity === "paragraph" ? "active" : ""}" onclick="handleGranularityChange('paragraph')">Paragraph</button>
         <button id="granularity-btn-sentence" class="gr-segment-btn ${currentGranularity === "sentence" ? "active" : ""}" onclick="handleGranularityChange('sentence')">Sentence</button>
@@ -3483,8 +3603,20 @@ function renderSidebarPanel(session, config, metrics) {
       </div>
     </div>
 
-    <!-- Section 4: Review Progress & Queue -->
-    <div class="gr-sidebar-section">
+    <!-- Section 4: AI Review Actions (Below Prompt Style) -->
+    <div class="gr-sidebar-section" id="sidebar-review-btn-container">
+      <div class="gr-sidebar-btn-row">
+        <button class="gr-btn btn-primary" id="sidebar-run-review-btn" title="Review active chunk" onclick="sendAction('runReview')">
+          ${reviewBtnLabel}
+        </button>
+        <button class="gr-btn btn-secondary" id="sidebar-review-all-btn" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
+          \u26A1 All Pending ${pendingCount > 0 ? `(${pendingCount})` : ""}
+        </button>
+      </div>
+    </div>
+
+    <!-- Section 5: Review Progress & Queue -->
+    <div class="gr-sidebar-section" id="sidebar-progress-container">
       <div class="gr-sidebar-header" style="margin-bottom: 6px;">
         <span class="gr-section-title">PROGRESS</span>
         <span style="font-size: 12px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono);">
@@ -3501,7 +3633,7 @@ function renderSidebarPanel(session, config, metrics) {
       </div>
     </div>
 
-    <!-- Section 5: Keyboard Shortcuts Footer -->
+    <!-- Section 6: Keyboard Shortcuts Footer -->
     <div class="gr-sidebar-section" style="background: rgba(0, 0, 0, 0.18); padding: 10px 14px;">
       <div style="font-size: 11px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: center; align-items: center;">
         <span><kbd>A</kbd> Accept</span>
@@ -3603,9 +3735,9 @@ function renderDiffCard(item, index, total, session = null) {
     <div class="gr-diff-body" id="diff-body-${index}">
       
       <!-- Dual Pane Container for Clean, Inline, Side-by-Side -->
-      <div class="gr-panes-wrapper" id="panes-wrapper-${index}">
-        <!-- Left Pane: Original Draft -->
-        <div class="gr-pane" id="original-pane-wrapper-${index}">
+      <div class="gr-panes-wrapper" id="panes-wrapper-${index}" style="grid-template-columns: 1fr;">
+        <!-- Left Pane: Original Draft (Hidden in single-pane Clean and Inline modes) -->
+        <div class="gr-pane" id="original-pane-wrapper-${index}" style="display: none;">
           <div class="gr-pane-title">
             <span>\u{1F4C4} Original Draft</span>
             <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${origWords} words</span>
@@ -3613,19 +3745,19 @@ function renderDiffCard(item, index, total, session = null) {
           <div class="gr-pane-content" id="original-pane-${index}">${leftPaneHtml}</div>
         </div>
 
-        <!-- Right Pane: AI Suggestion / Unified Inline -->
+        <!-- Right Pane: Clean Prose / AI Suggestion / Unified Inline -->
         <div class="gr-pane" id="suggestion-pane-wrapper-${index}">
           <div class="gr-pane-title">
-            <span id="suggestion-pane-label-${index}">\u2728 AI Suggestion</span>
+            <span id="suggestion-pane-label-${index}">\u2728 Clean Polished Prose (Final)</span>
             <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${suggWords} words</span>
           </div>
           
           <div class="gr-pane-content" id="suggestion-pane-${index}" 
-               data-clean="${escapeDataAttr(suggestedCleanHtml)}"
+               data-clean="${escapeDataAttr(rawPlainHtml)}"
                data-inline="${escapeDataAttr(inlineDiffHtml)}"
                data-side="${escapeDataAttr(suggestedCleanHtml)}"
                data-changes="${escapeDataAttr(changesOnlyHtml)}"
-               data-plain="${escapeDataAttr(rawPlainHtml)}">${suggestedCleanHtml}</div>
+               data-plain="${escapeDataAttr(rawPlainHtml)}">${rawPlainHtml}</div>
         </div>
       </div>
 
@@ -3840,10 +3972,13 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
   
   <!-- Universal Sandboxed-Safe In-DOM Modal Dialog -->
   <div id="gr-modal-backdrop" class="gr-modal-backdrop" style="display: none;">
-    <div class="gr-modal-box">
+    <div class="gr-modal-box" id="gr-modal-box">
       <div class="gr-modal-header">
         <h3 id="gr-modal-title" class="gr-modal-title">Dialog</h3>
-        <button class="gr-modal-close" onclick="closeAppModal()">\u2715</button>
+        <div class="gr-modal-header-actions">
+          <button id="gr-modal-btn-enlarge" class="gr-modal-enlarge-btn" onclick="toggleModalEnlarge()" title="Enlarge window / Restore">\u26F6</button>
+          <button class="gr-modal-close" onclick="closeAppModal()" title="Close">\u2715</button>
+        </div>
       </div>
       <div id="gr-modal-body" class="gr-modal-body">
         <p id="gr-modal-message" class="gr-modal-message"></p>
@@ -4005,20 +4140,51 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     // ==========================================
     let activeModalCallback = null;
 
+    function toggleModalEnlarge() {
+      const modalBox = document.getElementById("gr-modal-box");
+      const btn = document.getElementById("gr-modal-btn-enlarge");
+      if (!modalBox) return;
+      const isEnlarged = modalBox.classList.toggle("enlarged");
+      if (btn) {
+        btn.innerHTML = isEnlarged ? "\u{1F5D7}" : "\u26F6";
+        btn.title = isEnlarged ? "Restore original size" : "Enlarge window to full screen";
+      }
+    }
+
     function closeAppModal() {
       const backdrop = document.getElementById("gr-modal-backdrop");
+      const modalBox = document.getElementById("gr-modal-box");
+      const btn = document.getElementById("gr-modal-btn-enlarge");
       if (backdrop) backdrop.style.display = "none";
+      if (modalBox) {
+        modalBox.classList.remove("enlarged");
+        modalBox.classList.remove("gr-modal-large");
+      }
+      if (btn) {
+        btn.innerHTML = "\u26F6";
+        btn.title = "Enlarge window / Restore";
+      }
       activeModalCallback = null;
     }
 
-    function showAppPrompt({ title = "Input", message = "", defaultValue = "", isTextarea = false, placeholder = "", onConfirm }) {
+    function showAppPrompt({ title = "Input", message = "", defaultValue = "", isTextarea = false, isLarge = false, allowEnlarge = true, placeholder = "", onConfirm }) {
       const backdrop = document.getElementById("gr-modal-backdrop");
+      const modalBox = document.getElementById("gr-modal-box");
       const titleElem = document.getElementById("gr-modal-title");
       const msgElem = document.getElementById("gr-modal-message");
       const inputContainer = document.getElementById("gr-modal-input-container");
       const confirmBtn = document.getElementById("gr-modal-btn-confirm");
+      const enlargeBtn = document.getElementById("gr-modal-btn-enlarge");
 
       if (!backdrop || !inputContainer) return;
+
+      if (modalBox) {
+        modalBox.classList.toggle("gr-modal-large", !!isLarge || !!isTextarea);
+      }
+
+      if (enlargeBtn) {
+        enlargeBtn.style.display = (allowEnlarge || isTextarea) ? "inline-flex" : "none";
+      }
 
       titleElem.innerText = title;
       msgElem.innerText = message;
@@ -4227,9 +4393,11 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       const cur = serverSession?.customPrompt || "";
       showAppPrompt({
         title: "Custom AI Prompt / Instruction",
-        message: "Provide specific guidance for how the AI should edit or polish your text:",
+        message: "Provide specific guidance for how the AI should edit or polish your text (click \u26F6 to expand full-screen):",
         defaultValue: cur,
         isTextarea: true,
+        isLarge: true,
+        allowEnlarge: true,
         placeholder: "e.g. Make concise, preserve bullet points, use active voice, sound friendly...",
         onConfirm: (val) => {
           if (val && val.trim().length > 0) {
@@ -4276,6 +4444,8 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     function setDiffViewMode(index, mode) {
       const panesWrapper = document.getElementById("panes-wrapper-" + index);
       const changesView = document.getElementById("changes-only-view-" + index);
+      const originalPaneWrapper = document.getElementById("original-pane-wrapper-" + index);
+      const suggestionPaneWrapper = document.getElementById("suggestion-pane-wrapper-" + index);
       const suggestionPane = document.getElementById("suggestion-pane-" + index);
       const suggestionLabel = document.getElementById("suggestion-pane-label-" + index);
 
@@ -4290,24 +4460,37 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         return;
       }
 
-      if (panesWrapper) panesWrapper.style.display = "grid";
       if (changesView) changesView.style.display = "none";
-
-      if (!suggestionPane) return;
+      if (!suggestionPane || !panesWrapper) return;
 
       const cleanHtml = decodeURIComponent(suggestionPane.getAttribute("data-clean") || "");
       const inlineHtml = decodeURIComponent(suggestionPane.getAttribute("data-inline") || "");
       const sideHtml = decodeURIComponent(suggestionPane.getAttribute("data-side") || "");
 
-      if (mode === "inline") {
-        suggestionPane.innerHTML = inlineHtml;
-        if (suggestionLabel) suggestionLabel.innerText = "\u{1F500} Unified Inline Diff";
-      } else if (mode === "side") {
-        suggestionPane.innerHTML = sideHtml;
-        if (suggestionLabel) suggestionLabel.innerText = "\u{1F465} Side-by-Side (Suggested)";
-      } else {
+      if (mode === "clean") {
+        // Mode 1: Clean Prose (100% full width, pure finalized prose)
+        panesWrapper.style.display = "grid";
+        panesWrapper.style.gridTemplateColumns = "1fr";
+        if (originalPaneWrapper) originalPaneWrapper.style.display = "none";
+        if (suggestionPaneWrapper) suggestionPaneWrapper.style.display = "flex";
         suggestionPane.innerHTML = cleanHtml;
-        if (suggestionLabel) suggestionLabel.innerText = "\u2728 AI Clean Prose";
+        if (suggestionLabel) suggestionLabel.innerText = "\u2728 Clean Polished Prose (Final)";
+      } else if (mode === "inline") {
+        // Mode 2: Inline Diff (100% full width, unified track changes with <del> and <ins>)
+        panesWrapper.style.display = "grid";
+        panesWrapper.style.gridTemplateColumns = "1fr";
+        if (originalPaneWrapper) originalPaneWrapper.style.display = "none";
+        if (suggestionPaneWrapper) suggestionPaneWrapper.style.display = "flex";
+        suggestionPane.innerHTML = inlineHtml;
+        if (suggestionLabel) suggestionLabel.innerText = "\u{1F500} Unified Inline Diff (Track Changes)";
+      } else if (mode === "side") {
+        // Mode 3: Side-by-Side (Dual-pane comparison: Original vs AI Suggestion)
+        panesWrapper.style.display = "grid";
+        panesWrapper.style.gridTemplateColumns = "1fr 1fr";
+        if (originalPaneWrapper) originalPaneWrapper.style.display = "flex";
+        if (suggestionPaneWrapper) suggestionPaneWrapper.style.display = "flex";
+        suggestionPane.innerHTML = sideHtml;
+        if (suggestionLabel) suggestionLabel.innerText = "\u2728 AI Suggestion (Highlighted)";
       }
     }
 
@@ -4405,6 +4588,45 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         try {
           const res = await window.callAmplenotePlugin(action, ...args);
           setTopLoading(false);
+          if (res && res.workspaceHtml) {
+            const reviewContainer = document.getElementById("tab-view-review");
+            if (reviewContainer) {
+              const mainCanvas = document.getElementById("main-canvas-container");
+              const progressContainer = document.getElementById("sidebar-progress-container");
+              const reviewBtnContainer = document.getElementById("sidebar-review-btn-container");
+              const curGranularity = document.getElementById("granularity-segmented-control");
+
+              const temp = document.createElement("div");
+              temp.innerHTML = res.workspaceHtml;
+              const newCanvas = temp.querySelector("#main-canvas-container");
+              const newProgress = temp.querySelector("#sidebar-progress-container");
+              const newReviewBtn = temp.querySelector("#sidebar-review-btn-container");
+              const newGranularity = temp.querySelector("#granularity-segmented-control");
+
+              if (mainCanvas && newCanvas) {
+                mainCanvas.innerHTML = newCanvas.innerHTML;
+                if (progressContainer && newProgress) {
+                  progressContainer.innerHTML = newProgress.innerHTML;
+                }
+                if (reviewBtnContainer && newReviewBtn) {
+                  reviewBtnContainer.innerHTML = newReviewBtn.innerHTML;
+                }
+                if (curGranularity && newGranularity) {
+                  curGranularity.innerHTML = newGranularity.innerHTML;
+                }
+              } else {
+                reviewContainer.innerHTML = res.workspaceHtml;
+              }
+              initScrollSync();
+              syncAuditCheckboxes();
+            }
+          }
+          if (res && res.session) {
+            serverSession = res.session;
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(res.session));
+            } catch (e) {}
+          }
           return res;
         } catch (err) {
           setTopLoading(false);
@@ -4432,9 +4654,11 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       const currentText = document.getElementById("suggestion-pane-" + index)?.innerText || "";
       showAppPrompt({
         title: "Manual Edit (Item #" + (index + 1) + ")",
-        message: "Directly edit the rewritten text:",
+        message: "Directly edit the rewritten text (click \u26F6 to expand full-screen):",
         defaultValue: currentText,
         isTextarea: true,
+        isLarge: true,
+        allowEnlarge: true,
         onConfirm: (edited) => {
           if (edited !== null && edited !== undefined) {
             sendAction("manualEditItem", index, edited);
@@ -4673,7 +4897,7 @@ function renderReviewWorkspace(session, config, metrics, currentItem) {
     <div class="gr-workbench">
       ${renderSidebarPanel(session, config, metrics)}
 
-      <main class="gr-main-canvas">
+      <main class="gr-main-canvas" id="main-canvas-container">
         ${renderDiffCard(currentItem, session.currentIndex, session.items.length, session)}
 
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; flex-wrap: wrap; gap: 10px;">
@@ -4819,33 +5043,33 @@ function renderSettingsWorkspace(config) {
       <div class="gr-settings-form">
         <input type="hidden" id="settings-provider" value="${escapeHtml(activeProvider)}">
 
-        <div class="gr-form-group" id="settings-api-key-group" style="display: ${activeProvider.includes("Ollama") ? "none" : "flex"};">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="gr-form-group" id="settings-api-key-group" style="display: ${activeProvider.includes("Ollama") ? "none" : "flex"}; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
             <label class="gr-form-label" id="settings-api-key-label" for="settings-api-key">${escapeHtml(activeProvider)} API Key</label>
             <a id="settings-doc-link" href="${docUrl}" target="_blank" style="font-size: 12px; color: var(--accent-primary); text-decoration: none; font-weight: 600;">Get API Key \u2197</a>
           </div>
 
-          <div id="key-preview-banner" style="font-size: 12px; padding: 6px 10px; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between;">
+          <div id="key-preview-banner" style="font-size: 12px; padding: 8px 12px; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; width: 100%;">
             ${currentKey && currentKey.trim().length > 0 ? `
-              <div><span style="color: var(--accent-success); font-weight: 600;">\u{1F512} Saved Key:</span> <code style="background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px;">\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${escapeHtml(currentKey.slice(-4))}</code></div>
+              <div><span style="color: var(--accent-success); font-weight: 600;">\u{1F512} Saved Key:</span> <code style="background: rgba(0,0,0,0.2); padding: 2px 6px; border-radius: 4px; font-family: var(--font-mono);">\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022${escapeHtml(currentKey.slice(-4))}</code></div>
             ` : `
-              <span style="color: var(--accent-warning);">\u26A0\uFE0F No key saved \u2014 enter key below</span>
+              <span style="color: var(--accent-warning); font-weight: 500;">\u26A0\uFE0F No key saved \u2014 enter key below</span>
             `}
           </div>
 
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="password" id="settings-api-key" class="gr-input" style="flex: 1; padding: 8px 12px;" placeholder="Paste new or updated API Key" value="${escapeHtml(currentKey)}">
-            <button type="button" id="toggle-key-btn" class="gr-btn btn-secondary" style="padding: 8px 12px; font-size: 12px; white-space: nowrap;" onclick="toggleApiKeyVisibility()">
+          <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
+            <input type="password" id="settings-api-key" class="gr-input" style="flex: 1; min-width: 0; padding: 8px 12px;" placeholder="Paste new or updated API Key" value="${escapeHtml(currentKey)}">
+            <button type="button" id="toggle-key-btn" class="gr-btn btn-secondary" style="padding: 8px 14px; font-size: 12px; white-space: nowrap;" onclick="toggleApiKeyVisibility()">
               \u{1F441}\uFE0F Show
             </button>
-            <button type="button" class="gr-btn btn-danger" style="padding: 8px 12px; font-size: 12px; white-space: nowrap;" title="Clear and delete saved key" onclick="clearActiveApiKey()">
+            <button type="button" class="gr-btn btn-danger" style="padding: 8px 14px; font-size: 12px; white-space: nowrap;" title="Clear and delete saved key" onclick="clearActiveApiKey()">
               \u{1F5D1}\uFE0F Clear
             </button>
           </div>
           <span class="gr-form-help">Keys are securely stored in your Amplenote plugin settings.</span>
         </div>
 
-        <div id="settings-base-url-group" class="gr-form-group" style="display: ${activeProvider.includes("Ollama") ? "flex" : "none"};">
+        <div id="settings-base-url-group" class="gr-form-group" style="display: ${activeProvider.includes("Ollama") ? "flex" : "none"}; flex-direction: column; gap: 8px;">
           <label class="gr-form-label" for="settings-base-url">Local Ollama Base URL</label>
           <input type="text" id="settings-base-url" class="gr-input" style="width: 100%; padding: 8px 12px;" placeholder="http://localhost:11434/v1" value="${escapeHtml(config.customBaseUrl || "http://localhost:11434/v1")}">
           <span class="gr-form-help">Ensure Ollama is running with <code>OLLAMA_ORIGINS="*"</code> to allow web browser connection.</span>
@@ -4859,7 +5083,7 @@ function renderSettingsWorkspace(config) {
           </select>
         </div>
 
-        <div id="custom-model-input-group" class="gr-form-group" style="display: ${isCustomModelActive ? "flex" : "none"};">
+        <div id="custom-model-input-group" class="gr-form-group" style="display: ${isCustomModelActive ? "flex" : "none"}; flex-direction: column; gap: 8px;">
           <label class="gr-form-label" for="settings-model">Enter Custom Model ID</label>
           <input type="text" id="settings-model" class="gr-input" style="width: 100%; padding: 8px 12px;" placeholder="e.g. llama3.2:1b, mistral-nemo, gpt-4-turbo" value="${escapeHtml(activeSavedModel)}">
           <span class="gr-form-help">Type the exact model tag or endpoint ID you wish to use.</span>
@@ -4930,11 +5154,10 @@ var plugin = {
     const action = args[0];
     const session = getActiveSession();
     try {
-      let requiresReRender = true;
+      let requiresReRender = false;
       switch (action) {
         case "selectNote":
           await launchReviewer(app, null, true);
-          requiresReRender = false;
           break;
         case "restoreSession": {
           if (args[1]) {
@@ -4943,11 +5166,11 @@ var plugin = {
               setActiveSession(restored);
             }
           }
-          requiresReRender = false;
           break;
         }
         case "clearSession":
           clearActiveSession();
+          requiresReRender = true;
           break;
         case "refreshHistory":
           activeTabState = "history";
@@ -5148,6 +5371,18 @@ Audit report created: ${res.changesNoteUUID}`);
           await app.renderEmbed();
         }
       }
+      const activeSession = getActiveSession();
+      if (activeSession) {
+        const config = getProviderConfig(app);
+        const metrics = activeSession.getMetrics();
+        const currentItem = activeSession.items[activeSession.currentIndex] || null;
+        return {
+          success: true,
+          session: activeSession.toJSON(),
+          workspaceHtml: renderReviewWorkspace(activeSession, config, metrics, currentItem)
+        };
+      }
+      return { success: true };
     } catch (err) {
       console.error("[GrammarReviewer] Error processing onEmbedCall:", err);
       const errorMsg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Unknown error";

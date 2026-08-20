@@ -11,8 +11,12 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - `🔀 Inline Diff`: Traditional unified diff with inline `<del>` and `<ins>` highlights.
   - `👥 Side-by-Side`: Dual-pane side-by-side comparison with original strikethroughs and suggestion insertions.
   - `📋 Changes Only`: Filtered list of distinct modifications ("old" → "new", additions, removals) with change numbers and type badges.
-- **Zero-Flicker Client-Side Left Sidebar Reactivity**:
-  - Provider changes, model selection, prompt style switching, and custom instructions update instantaneously in the DOM with 0ms latency without triggering full-screen iframe re-renders or white flashes.
+- **Zero-Flicker Client-Side Left Sidebar & Canvas Reactivity**:
+  - Provider changes, model selection, prompt style switching, and custom instructions update instantaneously in the DOM with 0ms latency without triggering full-screen iframe re-renders.
+  - Review runs, item navigation, accept/reject, and undo perform targeted in-place DOM updates on the main canvas and progress bar, keeping the left sidebar permanently mounted with zero flicker or scroll jumping.
+- **Floating Toast Operation Indicator & 1-Click Cancellation**:
+  - Floating fixed top pill (`.gr-op-banner`) and slim progress bar that notify the user during AI reviews without shifting or bouncing the document layout.
+  - 1-click **Stop Review** cancellation for `Review All`.
 - **Review Navigator & Direct Item Jumping**:
   - Direct Jump-to selector with live status icons (`✓ Accepted`, `✕ Rejected`, `✎ Edited`, `● Ready`, `○ Pending`).
   - `⏮ Prev Pending` and `Next Pending ⏭` buttons to skip already reviewed chunks and jump directly to pending items.
@@ -22,9 +26,6 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 - **Reversible Decision Undo**:
   - One-click `↩ Undo` on accepted, rejected, or manually edited items to revert decisions without losing progress.
   - Power shortcut `U` or `Ctrl+Z`.
-- **Top Operation Loading Bar & Cancellation**:
-  - Slim animated top progress bar and operation status banner during single or batch reviews.
-  - 1-click **Stop Review** cancellation for `Review All`.
 - **Paragraph-Preserving Sentence Reconstruction**:
   - Safe sentence tokenizer and reconstruction engine that preserves paragraph boundaries and multi-line markdown formatting without inserting stray newlines.
 - **Stale Note Overwrite Guard**:
@@ -34,7 +35,7 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - **Amplenote Native Version History**: Integrates with Amplenote's built-in 10-minute save point version history (`... > View revision history`).
   - **Optional Audit Logging**: Users can enable `-reports/-grammar/*` archive notes in Settings or History if dedicated iteration snapshots are desired.
 - **100% Full-Width 2-Column Workbench**:
-  - **Left Sidebar Inspector**: AI engine selector, model switcher (only saved providers), segmented granularity switcher (`Full Note`, `Paragraph`, `Sentence`), prompt presets, live progress tracker, and hotkeys.
+  - **Left Sidebar Inspector (Natural Top-to-Bottom Flow)**: AI engine selector ➔ segmented granularity switcher (`Full Note`, `Paragraph`, `Sentence`) ➔ categorized prompt style presets ➔ review action buttons (`Review Chunk` & `⚡ All Pending`) ➔ live progress tracker ➔ hotkeys.
   - **Expansive Main Canvas**: 100% screen width and viewport height dedicated to side-by-side note diffs and review controls.
 - **Synchronized Dual-Pane Scrolling**:
   - Bidirectional proportional scroll synchronization between Original Text and AI Suggestion diff panes for long paragraphs and `Full Note` reviews.
