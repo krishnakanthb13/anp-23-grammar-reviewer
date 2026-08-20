@@ -1,5 +1,27 @@
 # Release Notes: Amplenote Grammar & Style Reviewer
 
+## v0.0.2 (2026-08-20)
+
+### 🚀 New Features
+- **100% Full-Width 2-Column Workbench Layout**: Replaced stacked horizontal top bars with a sleek Left Control Sidebar paired with an expansive, full-viewport note diff canvas.
+- **Synchronized Dual-Pane Scrolling**: Bidirectional proportional scroll synchronization between original text and AI suggestion diff panes with jitter and loopback protection.
+- **Direct AI Engine & Model Switcher (Reviewer Tab)**: Added quick provider and model dropdowns in the Reviewer sidebar filtered exclusively to providers where an API key or configuration is saved.
+- **Per-Provider Model Memory (Zero Table Bloat)**: Saved custom models and selections are stored independently for each provider via clean JSON formatting within existing settings (`Custom AI Model`), avoiding any table schema changes.
+- **Dynamic Model Selector & Custom Override Flow**: Dropdown includes `⚙️ Custom Model Override...` that dynamically reveals and focuses the custom model ID text field.
+- **Direct 1-Click Fullscreen Launch**: Removed intermediate sidebar/fullscreen selection dialogs for instant 1-click workspace entry.
+- **Smart Note Memory**: Remembers and automatically re-opens the last reviewed note when launched from the App Menu or clicked without an active note.
+- **Default Full Note Granularity**: Defaults to reviewing the entire note in a unified pass with synchronized dual-pane scrolling.
+
+### ⚡ Improvements
+- **Immediate Reviewer Reflection**: Saving a new provider or custom model in Settings instantly updates `session.provider` and `session.model` in the active Reviewer workbench without requiring a note reload.
+- **Clean Sidebar Spacing & Multi-line Presets**: Cleanly padded sidebar sections (`14px 16px`) with word-wrapping preset buttons and comfortable vertical spacing.
+
+### 🐛 Bug Fixes
+- **Custom Model Duplicate Text**: Fixed duplicate helper text and extra closing `<div>` tag in the custom model override group.
+- **Localhost CORS / Loopback Error Guidance**: Added automatic detection and clear troubleshooting instructions for `OLLAMA_ORIGINS="*"` when connecting to local Ollama instances.
+
+---
+
 ## v0.0.1 (2026-08-20)
 
 ### 🚀 New Features

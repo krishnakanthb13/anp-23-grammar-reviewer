@@ -38,7 +38,7 @@ const plugin = {
 
       switch (action) {
         case "selectNote":
-          await launchReviewer(app);
+          await launchReviewer(app, null, true);
           requiresReRender = false;
           break;
 
@@ -74,6 +74,7 @@ const plugin = {
           const settingsPayload = args[1] || {};
           const targetProvider = settingsPayload.provider;
           const apiKey = settingsPayload.apiKey;
+          const customModel = settingsPayload.customModel;
 
           if (typeof app.setSetting === "function") {
             if (targetProvider) {
@@ -82,9 +83,20 @@ const plugin = {
                 await app.setSetting(`${targetProvider} API Key`, apiKey.trim());
               }
             }
-            if (settingsPayload.customModel !== undefined) {
-              await app.setSetting("Custom AI Model", settingsPayload.customModel.trim());
+
+            // Persist model selection per-provider into existing Custom AI Model setting as JSON
+            if (targetProvider && customModel !== undefined) {
+              let modelMap = {};
+              try {
+                const rawModelSetting = app.settings?.["Custom AI Model"];
+                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
+                  modelMap = JSON.parse(rawModelSetting);
+                }
+              } catch (e) {}
+              modelMap[targetProvider] = customModel.trim();
+              await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }
+
             if (settingsPayload.customBaseUrl !== undefined) {
               await app.setSetting("Custom Base URL", settingsPayload.customBaseUrl.trim());
               if (targetProvider === "Ollama (Local)") {
@@ -95,9 +107,9 @@ const plugin = {
 
           if (session && targetProvider) {
             session.provider = targetProvider;
-            if (settingsPayload.customModel) {
-              session.model = settingsPayload.customModel;
-            }
+            session.model = (customModel && customModel.trim().length > 0)
+              ? customModel.trim()
+              : (DEFAULT_MODELS[targetProvider] || "");
           }
 
           await app.alert("Settings saved successfully!");
@@ -109,17 +121,52 @@ const plugin = {
           handleSetGranularity(app, args[1]);
           break;
 
-        case "setProvider":
-          if (session) {
-            session.provider = args[1];
-          }
-          break;
+        case "setProvider": {
+          const newProvider = args[1];
+          if (newProvider) {
+            let savedModelForNewProvider = DEFAULT_MODELS[newProvider] || "";
+            try {
+              const rawModelSetting = app.settings?.["Custom AI Model"];
+              if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
+                const parsed = JSON.parse(rawModelSetting);
+                if (parsed[newProvider]) {
+                  savedModelForNewProvider = parsed[newProvider];
+                }
+              }
+            } catch (e) {}
 
-        case "setModel":
-          if (session) {
-            session.model = args[1];
+            if (session) {
+              session.provider = newProvider;
+              session.model = savedModelForNewProvider;
+            }
+            if (typeof app.setSetting === "function") {
+              await app.setSetting("AI Provider", newProvider);
+            }
           }
           break;
+        }
+
+        case "setModel": {
+          const newModel = args[1];
+          const curProvider = session?.provider || app.settings?.["AI Provider"] || DEFAULT_PROVIDER;
+          if (newModel) {
+            if (session) {
+              session.model = newModel;
+            }
+            if (typeof app.setSetting === "function") {
+              let modelMap = {};
+              try {
+                const rawModelSetting = app.settings?.["Custom AI Model"];
+                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
+                  modelMap = JSON.parse(rawModelSetting);
+                }
+              } catch (e) {}
+              modelMap[curProvider] = newModel.trim();
+              await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
+            }
+          }
+          break;
+        }
 
         case "setPreset":
           if (session) {

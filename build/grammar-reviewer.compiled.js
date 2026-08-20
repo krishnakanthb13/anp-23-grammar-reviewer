@@ -29,8 +29,8 @@ var PROVIDERS = {
   OPENAI: "OpenAI",
   ANTHROPIC: "Anthropic"
 };
-var DEFAULT_PROVIDER = PROVIDERS.OPENROUTER;
-var DEFAULT_MODELS = {
+var DEFAULT_PROVIDER2 = PROVIDERS.OPENROUTER;
+var DEFAULT_MODELS2 = {
   [PROVIDERS.OPENROUTER]: "openai/gpt-oss-120b:free",
   [PROVIDERS.GEMINI]: "gemini-3.5-flash-lite",
   [PROVIDERS.GROQ]: "openai/gpt-oss-120b",
@@ -387,7 +387,7 @@ var ReviewSession = class _ReviewSession {
     noteUUID = "",
     noteTitle = "Untitled Note",
     originalContent = "",
-    granularity = GRANULARITY_MODES.PARAGRAPH,
+    granularity = GRANULARITY_MODES.FULL,
     promptPresetId = "grammar_spelling",
     customPrompt = "",
     provider = "OpenRouter",
@@ -611,6 +611,18 @@ var BaseProvider = class {
       if (err.name === "AbortError") {
         throw new Error(`Request timed out after ${Math.round(this.timeoutMs / 1e3)}s.`);
       }
+      if (err instanceof TypeError && (err.message.includes("Failed to fetch") || err.message.includes("NetworkError") || err.message.includes("CORS"))) {
+        if (url.includes("localhost") || url.includes("127.0.0.1")) {
+          throw new Error(
+            `Localhost Connection Blocked by Browser CORS Policy.
+
+To allow Amplenote to connect to your local Ollama:
+1. Windows: Set environment variable OLLAMA_ORIGINS="*" and restart Ollama.
+2. Mac/Linux: Run 'OLLAMA_ORIGINS="*" ollama serve'.
+3. Or use OpenRouter, Google Gemini, or Groq free tiers in Settings.`
+          );
+        }
+      }
       throw err;
     } finally {
       clearTimeout(timer);
@@ -636,7 +648,7 @@ var OpenAIProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.openai.com/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.OPENAI]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.OPENAI]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -677,7 +689,7 @@ var AnthropicProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.anthropic.com/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.ANTHROPIC]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.ANTHROPIC]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -720,7 +732,7 @@ var GeminiProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://generativelanguage.googleapis.com/v1beta",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.GEMINI]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.GEMINI]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -768,7 +780,7 @@ var OpenRouterProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://openrouter.ai/api/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.OPENROUTER]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.OPENROUTER]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -811,7 +823,7 @@ var GroqProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.groq.com/openai/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.GROQ]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.GROQ]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -852,7 +864,7 @@ var DeepSeekProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.deepseek.com",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.DEEPSEEK]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.DEEPSEEK]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -893,7 +905,7 @@ var MistralProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.mistral.ai/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.MISTRAL]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.MISTRAL]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -934,7 +946,7 @@ var OllamaProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "http://localhost:11434/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.OLLAMA]
+      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.OLLAMA]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -972,56 +984,92 @@ var OllamaProvider = class extends BaseProvider {
 // anp-23-grammar-reviewer/lib/providers/providerRegistry.js
 function getProviderConfig(app) {
   const settings = app?.settings || {};
-  const selectedProvider = settings["AI Provider"] || DEFAULT_PROVIDER;
-  const keys = {
-    [PROVIDERS.OPENROUTER]: settings["OpenRouter API Key"] || settings["OpenRouter Key"] || "",
-    [PROVIDERS.GEMINI]: settings["Gemini API Key"] || settings["Google API Key"] || "",
-    [PROVIDERS.GROQ]: settings["Groq API Key"] || settings["Groq Key"] || "",
-    [PROVIDERS.MISTRAL]: settings["Mistral API Key"] || settings["Mistral Key"] || "",
-    [PROVIDERS.DEEPSEEK]: settings["DeepSeek API Key"] || settings["DeepSeek Key"] || "",
-    [PROVIDERS.OLLAMA]: settings["Ollama API Key"] || "",
-    [PROVIDERS.OPENAI]: settings["OpenAI API Key"] || settings["OpenAI Key"] || "",
-    [PROVIDERS.ANTHROPIC]: settings["Anthropic API Key"] || settings["Anthropic Key"] || ""
-  };
-  const customModel = settings["Custom AI Model"] || "";
+  const selectedProvider = settings["AI Provider"] || DEFAULT_PROVIDER2;
+  const keys = {};
+  const allModels = {};
+  let rawCustomModelSetting = settings["Custom AI Model"] || "";
+  let parsedCustomModels = {};
+  if (rawCustomModelSetting && typeof rawCustomModelSetting === "string") {
+    try {
+      if (rawCustomModelSetting.trim().startsWith("{")) {
+        const parsed = JSON.parse(rawCustomModelSetting);
+        if (typeof parsed === "object" && parsed !== null) {
+          parsedCustomModels = parsed;
+        }
+      } else {
+        parsedCustomModels[selectedProvider] = rawCustomModelSetting.trim();
+      }
+    } catch (e) {
+      parsedCustomModels[selectedProvider] = rawCustomModelSetting.trim();
+    }
+  }
+  for (const p of Object.values(PROVIDERS)) {
+    const rawVal = settings[`${p} API Key`] || settings[`${p} Key`] || "";
+    let extractedKey = "";
+    let extractedModel = parsedCustomModels[p] || "";
+    if (rawVal && typeof rawVal === "string") {
+      try {
+        if (rawVal.trim().startsWith("{")) {
+          const parsed = JSON.parse(rawVal);
+          if (typeof parsed === "object" && parsed !== null) {
+            extractedKey = parsed.apiKey || parsed.key || "";
+            if (parsed.model || parsed.customModel) {
+              extractedModel = parsed.model || parsed.customModel;
+            }
+          }
+        } else {
+          extractedKey = rawVal.trim();
+        }
+      } catch (e) {
+        extractedKey = rawVal.trim();
+      }
+    }
+    keys[p] = extractedKey;
+    allModels[p] = extractedModel;
+  }
+  const customModel = allModels[selectedProvider] || "";
   const customBaseUrl = settings["Custom Base URL"] || (selectedProvider === PROVIDERS.OLLAMA ? settings["Ollama Base URL"] || "http://localhost:11434/v1" : "");
   return {
     provider: selectedProvider,
     apiKey: keys[selectedProvider] || "",
     allKeys: keys,
+    allModels,
     customModel,
     customBaseUrl
   };
 }
-function createProviderInstance({ provider = DEFAULT_PROVIDER, apiKey = "", baseUrl = "", defaultModel = "" } = {}) {
-  const finalModel = defaultModel || DEFAULT_MODELS[provider];
+function createProviderInstance({ provider = DEFAULT_PROVIDER2, apiKey = "", baseUrl = "", defaultModel = "" } = {}) {
+  const finalModel = defaultModel || DEFAULT_MODELS2[provider];
   switch (provider) {
     case PROVIDERS.DEEPSEEK:
-      return new DeepSeekProvider({ apiKey, baseUrl, defaultModel: finalModel });
+      return new DeepSeekProvider({ apiKey, defaultModel: finalModel });
     case PROVIDERS.MISTRAL:
-      return new MistralProvider({ apiKey, baseUrl, defaultModel: finalModel });
+      return new MistralProvider({ apiKey, defaultModel: finalModel });
     case PROVIDERS.OLLAMA:
-      return new OllamaProvider({ apiKey, baseUrl: baseUrl || "http://localhost:11434/v1", defaultModel: finalModel });
-    case PROVIDERS.OPENAI:
-      return new OpenAIProvider({ apiKey, baseUrl, defaultModel: finalModel });
-    case PROVIDERS.ANTHROPIC:
-      return new AnthropicProvider({ apiKey, baseUrl, defaultModel: finalModel });
-    case PROVIDERS.GEMINI:
-      return new GeminiProvider({ apiKey, baseUrl, defaultModel: finalModel });
+      return new OllamaProvider({ baseUrl: baseUrl || "http://localhost:11434/v1", defaultModel: finalModel });
     case PROVIDERS.GROQ:
-      return new GroqProvider({ apiKey, baseUrl, defaultModel: finalModel });
+      return new GroqProvider({ apiKey, defaultModel: finalModel });
+    case PROVIDERS.GEMINI:
+      return new GeminiProvider({ apiKey, defaultModel: finalModel });
+    case PROVIDERS.ANTHROPIC:
+      return new AnthropicProvider({ apiKey, defaultModel: finalModel });
+    case PROVIDERS.OPENAI:
+      return new OpenAIProvider({ apiKey, defaultModel: finalModel });
     case PROVIDERS.OPENROUTER:
     default:
-      return new OpenRouterProvider({ apiKey, baseUrl, defaultModel: finalModel });
+      return new OpenRouterProvider({ apiKey, defaultModel: finalModel });
   }
 }
 
 // anp-23-grammar-reviewer/lib/features/launcher.js
-async function launchReviewer(app, targetNoteUUID) {
+async function launchReviewer(app, targetNoteUUID, forcePrompt = false) {
   try {
     let noteUUID = targetNoteUUID || app.context?.noteUUID;
     let noteTitle = "Untitled Note";
-    if (!noteUUID) {
+    if (!noteUUID && !forcePrompt) {
+      noteUUID = app.settings?.["Last Opened Note UUID"] || null;
+    }
+    if (!noteUUID || forcePrompt) {
       const selected = await app.prompt("Select note for Grammar Review:", {
         inputs: [
           {
@@ -1044,6 +1092,13 @@ async function launchReviewer(app, targetNoteUUID) {
       await app.alert("No note was selected.");
       return;
     }
+    if (typeof app.setSetting === "function") {
+      try {
+        await app.setSetting("Last Opened Note UUID", noteUUID);
+      } catch (saveErr) {
+        console.warn("[GrammarReviewer] Could not save Last Opened Note UUID:", saveErr);
+      }
+    }
     let noteContent = "";
     try {
       noteContent = await app.getNoteContent({ uuid: noteUUID }) || "";
@@ -1065,39 +1120,12 @@ async function launchReviewer(app, targetNoteUUID) {
       noteUUID,
       noteTitle,
       originalContent: noteContent,
-      granularity: GRANULARITY_MODES.PARAGRAPH,
+      granularity: GRANULARITY_MODES.FULL,
       provider: config.provider,
-      model: config.customModel
+      model: config.customModel || DEFAULT_MODELS2[config.provider] || ""
     });
     setActiveSession(session);
-    const lastChoice = app.settings?.["Last Embed View"] || "fullscreen";
-    const choiceResult = await app.prompt("Choose Reviewer Workspace View:", {
-      inputs: [
-        {
-          label: "Launch Target",
-          type: "select",
-          options: [
-            { label: "Fullscreen Tab (Dedicated Workspace)", value: "fullscreen" },
-            { label: "Peek Viewer (Sidebar)", value: "sidebar" }
-          ],
-          value: lastChoice
-        }
-      ]
-    });
-    if (!choiceResult) return;
-    const target = Array.isArray(choiceResult) ? choiceResult[0] : choiceResult;
-    if (typeof app.setSetting === "function") {
-      try {
-        await app.setSetting("Last Embed View", target);
-      } catch (setErr) {
-        console.warn("[GrammarReviewer] setSetting error:", setErr);
-      }
-    }
-    if (target === "fullscreen") {
-      await app.openEmbed();
-    } else {
-      await app.openSidebarEmbed(1);
-    }
+    await app.openEmbed();
   } catch (err) {
     console.error("[GrammarReviewer] Error in launchReviewer:", err);
     const errorMsg = err?.message || (typeof err === "string" ? err : JSON.stringify(err)) || "Unknown error occurred";
@@ -1143,10 +1171,12 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
     throw new Error(`Item at index ${targetIdx} does not exist.`);
   }
   const config = getProviderConfig(app);
+  const targetProvider = session.provider || config.provider;
+  const apiKey = config.allKeys[targetProvider] || config.apiKey;
   const provider = createProviderInstance({
-    provider: session.provider || config.provider,
-    apiKey: config.allKeys[session.provider || config.provider],
-    baseUrl: config.customBaseUrl,
+    provider: targetProvider,
+    apiKey,
+    baseUrl: targetProvider === "Ollama (Local)" ? config.customBaseUrl : void 0,
     defaultModel: session.model || config.customModel
   });
   const preset = getPromptPreset(session.promptPresetId);
@@ -1400,9 +1430,9 @@ var EMBED_STYLES = `
   --accent-danger: #ef4444;
   --accent-danger-bg: rgba(239, 68, 68, 0.18);
   --accent-warning: #f59e0b;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Helvetica, Arial, sans-serif;
   --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
@@ -1530,9 +1560,10 @@ body {
   font-family: var(--font-family);
   background-color: var(--bg-primary);
   color: var(--text-primary);
-  line-height: 1.6;
+  line-height: 1.5;
   min-height: 100%;
-  padding: 16px 20px 80px 20px;
+  width: 100%;
+  padding: 12px 16px 40px 16px;
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
@@ -1554,16 +1585,18 @@ body {
   background: var(--accent-primary);
 }
 
+/* Full Width Container */
 .gr-container {
-  max-width: 1120px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-height: 100%;
 }
 
-/* Header Bar */
+/* Top Header Bar */
 .gr-header {
   position: sticky;
   top: 0;
@@ -1572,11 +1605,11 @@ body {
   justify-content: space-between;
   align-items: center;
   background: var(--bg-secondary);
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   box-shadow: var(--card-shadow);
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -1587,15 +1620,15 @@ body {
 }
 
 .gr-logo {
-  font-size: 22px;
+  font-size: 20px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  padding: 6px 10px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
 }
 
 .gr-title {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.2px;
@@ -1615,7 +1648,7 @@ body {
 
 .gr-nav-tabs {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   background: var(--bg-primary);
   padding: 3px;
   border-radius: var(--radius-sm);
@@ -1626,7 +1659,7 @@ body {
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  padding: 7px 14px;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12px;
@@ -1646,11 +1679,11 @@ body {
 .gr-theme-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
-  padding: 7px 12px;
+  padding: 6px 10px;
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12px;
@@ -1666,106 +1699,194 @@ body {
 .gr-tab-view {
   display: none;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
+  width: 100%;
 }
 .gr-tab-view.active {
   display: flex;
 }
 
-/* Control Toolbar */
-.gr-toolbar {
-  background: var(--bg-secondary);
-  padding: 14px 18px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  display: flex;
-  flex-wrap: wrap;
+/* Workbench Full-Width 2-Column Grid */
+.gr-workbench {
+  display: grid;
+  grid-template-columns: 280px 1fr;
   gap: 14px;
-  align-items: center;
-  justify-content: space-between;
+  width: 100%;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .gr-workbench {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Left Inspector Sidebar */
+.gr-sidebar {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
   box-shadow: var(--card-shadow);
-}
-
-.gr-control-group {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
 }
 
-.gr-label {
+.gr-sidebar-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.gr-sidebar-section:last-child {
+  border-bottom: none;
+}
+
+.gr-sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.gr-section-title {
   font-size: 11px;
   font-weight: 700;
   color: var(--text-secondary);
+  letter-spacing: 0.6px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 
-.gr-select, .gr-input {
+.gr-btn-link {
+  background: transparent;
+  border: none;
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.gr-btn-link:hover {
+  text-decoration: underline;
+}
+
+/* AI Badge */
+.gr-ai-badge {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 7px 12px;
   border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.gr-ai-name {
   font-size: 13px;
-  outline: none;
-}
-
-.gr-select:focus, .gr-input:focus {
-  border-color: var(--border-active);
-}
-
-/* Prompt Preset Chips */
-.gr-preset-chips {
+  color: var(--text-primary);
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  margin-top: 8px;
 }
 
-.gr-chip {
-  background: var(--bg-card);
-  color: var(--text-secondary);
+.gr-ai-model {
+  font-size: 11px;
+  color: var(--accent-primary);
+  margin-top: 3px;
+  font-family: monospace;
+  word-break: break-all;
+}
+
+.gr-sidebar-btn-row {
+  display: flex;
+  gap: 8px;
+}
+.gr-sidebar-btn-row .gr-btn {
+  flex: 1;
+  justify-content: center;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+/* Segmented Control */
+.gr-segmented-control {
+  display: flex;
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  padding: 5px 12px;
-  border-radius: 16px;
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+}
+
+.gr-segment-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 7px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+.gr-segment-btn:hover {
+  color: var(--text-primary);
+}
+.gr-segment-btn.active {
+  background: var(--accent-primary);
+  color: #ffffff;
+}
+
+/* Presets List */
+.gr-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: none;
+  overflow: visible;
+}
+
+.gr-preset-item {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
+  text-align: left;
   cursor: pointer;
+  white-space: normal;
+  line-height: 1.35;
+  transition: all 0.15s ease;
 }
-
-.gr-chip:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
+.gr-preset-item:hover {
   border-color: var(--border-active);
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
 }
-
-.gr-chip.active {
+.gr-preset-item.active {
   background: var(--accent-primary);
   border-color: var(--accent-primary);
   color: #ffffff;
   font-weight: 700;
 }
 
-/* Progress Track */
-.gr-progress-card {
-  background: var(--bg-secondary);
-  padding: 12px 18px;
-  border-radius: var(--radius-md);
+.gr-custom-prompt-box {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--accent-primary);
+  background: var(--bg-primary);
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  box-shadow: var(--card-shadow);
+}
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
 }
 
-.gr-progress-header {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
+/* Progress Track */
 .gr-progress-track {
   width: 100%;
   height: 6px;
@@ -1779,19 +1900,32 @@ body {
   background: var(--accent-primary);
 }
 
-/* Diff Review Card */
-.gr-review-panel {
+.gr-metrics-row {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px;
 }
 
+/* Main Canvas */
+.gr-main-canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* Diff Review Card */
 .gr-diff-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: var(--card-shadow);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .gr-diff-card.active {
@@ -1800,7 +1934,7 @@ body {
 
 .gr-diff-header {
   background: rgba(0, 0, 0, 0.15);
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -1823,8 +1957,9 @@ body {
 .gr-diff-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  padding: 18px;
+  gap: 14px;
+  padding: 14px 16px;
+  flex: 1;
 }
 
 @media (max-width: 768px) {
@@ -1836,7 +1971,8 @@ body {
 .gr-pane {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  min-width: 0;
 }
 
 .gr-pane-title {
@@ -1854,8 +1990,9 @@ body {
   border: 1px solid var(--border-color);
   font-size: 14px;
   white-space: pre-wrap;
-  min-height: 120px;
-  max-height: 440px;
+  min-height: 440px;
+  height: calc(100vh - 290px);
+  max-height: 750px;
   overflow-y: auto;
   line-height: 1.7;
 }
@@ -1885,20 +2022,20 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 18px;
+  padding: 10px 16px;
   background: rgba(0, 0, 0, 0.1);
   border-top: 1px solid var(--border-color);
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 
 .gr-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 8px 16px;
+  padding: 7px 14px;
   border-radius: var(--radius-sm);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   border: 1px solid transparent;
@@ -1920,8 +2057,9 @@ body {
   background: var(--accent-success);
   color: #fff;
   font-size: 13px;
-  padding: 10px 22px;
+  padding: 10px 20px;
   border-radius: var(--radius-sm);
+  font-weight: 700;
 }
 
 .btn-save:hover {
@@ -1939,10 +2077,10 @@ body {
 }
 
 .gr-history-table th, .gr-history-table td {
-  padding: 12px 16px;
+  padding: 10px 14px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .gr-history-table th {
@@ -1971,7 +2109,7 @@ body {
 .gr-settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 10px;
 }
 @media (max-width: 768px) {
   .gr-settings-grid {
@@ -1982,11 +2120,11 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 14px;
+  padding: 12px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .gr-provider-card:hover {
   border-color: var(--border-active);
@@ -2010,16 +2148,16 @@ body {
 .gr-badge-free {
   background: var(--accent-success-bg);
   color: var(--accent-success);
-  font-size: 11px;
-  padding: 2px 7px;
+  font-size: 10px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-weight: 700;
 }
 .gr-badge-paid {
   background: rgba(148, 163, 184, 0.15);
   color: #cbd5e1;
-  font-size: 11px;
-  padding: 2px 7px;
+  font-size: 10px;
+  padding: 2px 6px;
   border-radius: 4px;
   font-weight: 600;
 }
@@ -2027,44 +2165,70 @@ body {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   box-shadow: var(--card-shadow);
 }
 .gr-form-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 .gr-form-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
 }
 .gr-form-help {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
+}
+.gr-select, .gr-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  outline: none;
+}
+.gr-select:focus, .gr-input:focus {
+  border-color: var(--border-active);
+}
+.gr-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 `;
 
 // anp-23-grammar-reviewer/lib/ui/promptSelectorComponent.js
-function renderToolbar(session, config) {
+function renderSidebarPanel(session, config, metrics) {
   const currentProvider = session?.provider || config.provider || PROVIDERS.OPENROUTER;
-  const currentGranularity = session?.granularity || "paragraph";
+  const currentModel = session?.model || config.customModel || DEFAULT_MODELS2[currentProvider] || "";
+  const currentGranularity = session?.granularity || "full";
   const currentPreset = session?.promptPresetId || "grammar_spelling";
-  const models = MODEL_CATALOG[currentProvider] || [];
-  const providerOptions = Object.values(PROVIDERS).map((p) => {
-    return `<option value="${p}" ${p === currentProvider ? "selected" : ""}>${p}</option>`;
+  const savedProviders = Object.values(PROVIDERS).filter((p) => {
+    if (p === PROVIDERS.OLLAMA) return true;
+    const key = config?.allKeys?.[p];
+    return Boolean(key && key.trim().length > 0) || p === currentProvider;
+  });
+  const providerOptionsHtml = savedProviders.map((p) => {
+    return `<option value="${escapeHtml(p)}" ${p === currentProvider ? "selected" : ""}>\u{1F916} ${escapeHtml(p)}</option>`;
   }).join("");
-  const modelOptions = models.map((m) => {
-    return `<option value="${m.value}" ${m.value === session?.model ? "selected" : ""}>${m.label}</option>`;
-  }).join("");
-  const promptChips = PREBUILT_PROMPTS.map((preset) => {
+  const catalog = MODEL_CATALOG[currentProvider] || [];
+  const isCustomModel = catalog.length > 0 && !catalog.some((m) => m.value === currentModel) && Boolean(currentModel);
+  const modelOptionsHtml = catalog.map((m) => {
+    return `<option value="${escapeHtml(m.value)}" ${m.value === currentModel ? "selected" : ""}>${escapeHtml(m.label)}</option>`;
+  }).join("") + (isCustomModel ? `<option value="${escapeHtml(currentModel)}" selected>Custom: ${escapeHtml(currentModel)}</option>` : "");
+  const presetButtons = PREBUILT_PROMPTS.map((preset) => {
     const isActive = preset.id === currentPreset && !session?.customPrompt;
     return `
-      <button class="gr-chip ${isActive ? "active" : ""}" 
+      <button class="gr-preset-item ${isActive ? "active" : ""}" 
               title="${preset.description}" 
               onclick="sendAction('setPreset', '${preset.id}')">
         ${preset.name}
@@ -2072,50 +2236,99 @@ function renderToolbar(session, config) {
     `;
   }).join("");
   return `
-  <div class="gr-toolbar">
-    <div class="gr-control-group">
-      <span class="gr-label">Granularity:</span>
-      <select class="gr-select" onchange="sendAction('setGranularity', this.value)">
-        <option value="full" ${currentGranularity === "full" ? "selected" : ""}>Full Note</option>
-        <option value="paragraph" ${currentGranularity === "paragraph" ? "selected" : ""}>Paragraph</option>
-        <option value="sentence" ${currentGranularity === "sentence" ? "selected" : ""}>Sentence</option>
-      </select>
-    </div>
-
-    <div class="gr-control-group">
-      <span class="gr-label">AI Provider:</span>
-      <select class="gr-select" onchange="sendAction('setProvider', this.value)">
-        ${providerOptions}
-      </select>
-
-      <span class="gr-label" style="margin-left: 8px;">Model:</span>
-      <select class="gr-select" onchange="sendAction('setModel', this.value)">
-        ${modelOptions}
-      </select>
-    </div>
-
-    <div class="gr-control-group">
-      <button class="gr-btn btn-primary" onclick="sendAction('runReview')">\u26A1 Run Review</button>
-      <button class="gr-btn btn-secondary" onclick="sendAction('reviewAll')">\u26A1 Review All</button>
-      <button class="gr-btn btn-secondary" title="Configure API Keys & Providers" onclick="sendAction('setTab', 'settings')">\u2699\uFE0F</button>
-    </div>
-  </div>
-
-  <div style="background: var(--bg-secondary); padding: 12px 20px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
-      <span class="gr-label">Prompt Style Presets:</span>
-      <a href="#" style="font-size: 12px; color: #60a5fa; text-decoration: none;" onclick="promptCustomInstruction()">+ Custom Instruction</a>
-    </div>
-    <div class="gr-preset-chips">
-      ${promptChips}
-    </div>
-    ${session?.customPrompt ? `
-      <div style="margin-top: 8px; font-size: 12px; color: #93c5fd; background: rgba(59, 130, 246, 0.1); padding: 6px 10px; border-radius: 4px;">
-        <strong>Active Custom Prompt:</strong> "${session.customPrompt}"
-        <a href="#" style="color: #ef4444; margin-left: 8px; text-decoration: none;" onclick="sendAction('clearCustomPrompt')">\u2715 Clear</a>
+  <aside class="gr-sidebar">
+    
+    <!-- Section 1: AI Engine & Model Selector (Only Saved Providers) -->
+    <div class="gr-sidebar-section">
+      <div class="gr-sidebar-header">
+        <span class="gr-section-title">AI ENGINE</span>
+        <button class="gr-btn-link" onclick="switchTab('settings')">\u2699\uFE0F Settings</button>
       </div>
-    ` : ""}
-  </div>
+
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div>
+          <label style="font-size: 10px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 2px; display: block;">Saved Provider</label>
+          <select id="quick-provider-select" class="gr-select" style="width: 100%; font-size: 11px; padding: 6px 8px;" onchange="sendAction('setProvider', this.value)">
+            ${providerOptionsHtml}
+          </select>
+        </div>
+
+        <div>
+          <label style="font-size: 10px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 2px; display: block;">Model</label>
+          <select id="quick-model-select" class="gr-select" style="width: 100%; font-size: 11px; padding: 6px 8px;" onchange="sendAction('setModel', this.value)">
+            ${modelOptionsHtml}
+          </select>
+        </div>
+      </div>
+
+      <div class="gr-sidebar-btn-row" style="margin-top: 4px;">
+        <button class="gr-btn btn-primary" onclick="sendAction('runReview')">
+          \u26A1 Review Item
+        </button>
+        <button class="gr-btn btn-secondary" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
+          \u26A1 All
+        </button>
+      </div>
+    </div>
+
+    <!-- Section 2: Granularity Mode -->
+    <div class="gr-sidebar-section">
+      <div class="gr-sidebar-header">
+        <span class="gr-section-title">GRANULARITY</span>
+      </div>
+      <div class="gr-segmented-control">
+        <button class="gr-segment-btn ${currentGranularity === "full" ? "active" : ""}" onclick="sendAction('setGranularity', 'full')">Full Note</button>
+        <button class="gr-segment-btn ${currentGranularity === "paragraph" ? "active" : ""}" onclick="sendAction('setGranularity', 'paragraph')">Paragraph</button>
+        <button class="gr-segment-btn ${currentGranularity === "sentence" ? "active" : ""}" onclick="sendAction('setGranularity', 'sentence')">Sentence</button>
+      </div>
+    </div>
+
+    <!-- Section 3: Prompt Style Presets -->
+    <div class="gr-sidebar-section">
+      <div class="gr-sidebar-header">
+        <span class="gr-section-title">PROMPT STYLE</span>
+        <button class="gr-btn-link" onclick="promptCustomInstruction()">+ Custom</button>
+      </div>
+      <div class="gr-preset-list">
+        ${presetButtons}
+      </div>
+      ${session?.customPrompt ? `
+        <div class="gr-custom-prompt-box">
+          <div style="font-weight: 700;">Custom Prompt:</div>
+          <div style="font-style: italic; margin: 3px 0 5px 0; line-height: 1.35;">"${escapeHtml(session.customPrompt)}"</div>
+          <button class="gr-btn-link" style="color: var(--accent-danger);" onclick="sendAction('clearCustomPrompt')">\u2715 Clear custom</button>
+        </div>
+      ` : ""}
+    </div>
+
+    <!-- Section 4: Review Progress -->
+    <div class="gr-sidebar-section">
+      <div class="gr-sidebar-header" style="margin-bottom: 6px;">
+        <span class="gr-section-title">PROGRESS</span>
+        <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">
+          ${metrics.reviewed} / ${metrics.total} (${metrics.percentComplete}%)
+        </span>
+      </div>
+      <div class="gr-progress-track">
+        <div class="gr-progress-fill" style="width: ${metrics.percentComplete}%;"></div>
+      </div>
+      <div class="gr-metrics-row">
+        <span style="color: var(--accent-success); font-weight: 600;">\u2713 Accepted: ${metrics.accepted}</span>
+        <span style="color: var(--accent-danger); font-weight: 600;">\u2717 Rejected: ${metrics.rejected}</span>
+      </div>
+    </div>
+
+    <!-- Section 5: Keyboard Shortcuts Footer -->
+    <div class="gr-sidebar-section" style="background: rgba(0,0,0,0.15); padding: 8px 12px;">
+      <div style="font-size: 11px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center;">
+        <span><code>A</code> Accept</span>
+        <span><code>R</code> Reject</span>
+        <span><code>N</code>/<code>P</code> Nav</span>
+        <span><code>T</code> Theme</span>
+      </div>
+    </div>
+
+  </aside>
   `;
 }
 
@@ -2133,6 +2346,7 @@ function renderDiffCard(item, index, total) {
       <div>
         <strong style="color: var(--text-primary);">Item #${index + 1} of ${total}</strong>
         <span style="color: var(--text-secondary); margin-left: 8px; font-size: 12px;">(${item.type})</span>
+        <span style="color: var(--text-muted); font-size: 11px; margin-left: 6px;" title="Scrolling one side automatically scrolls the other">\u{1F517} Sync Scroll</span>
       </div>
       <span class="gr-diff-badge ${badgeClass}">${statusLabel}</span>
     </div>
@@ -2140,7 +2354,7 @@ function renderDiffCard(item, index, total) {
     <div class="gr-diff-body">
       <div class="gr-pane">
         <div class="gr-pane-title">Original Text</div>
-        <div class="gr-pane-content">${escapeHtml(item.original)}</div>
+        <div class="gr-pane-content" id="original-pane-${index}">${escapeHtml(item.original)}</div>
       </div>
 
       <div class="gr-pane">
@@ -2369,6 +2583,54 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       }
     }
 
+    // Synchronized Scrolling for Dual-Pane Diff View (Full Note & Paragraphs)
+    function initScrollSync() {
+      const activeCard = document.querySelector(".gr-diff-card.active");
+      if (!activeCard) return;
+
+      const idx = activeCard.getAttribute("data-index");
+      const leftPane = document.getElementById("original-pane-" + idx);
+      const rightPane = document.getElementById("suggestion-pane-" + idx);
+
+      if (!leftPane || !rightPane) return;
+
+      let isSyncingLeft = false;
+      let isSyncingRight = false;
+
+      leftPane.onscroll = () => {
+        if (isSyncingLeft) {
+          isSyncingLeft = false;
+          return;
+        }
+        isSyncingRight = true;
+        const maxLeft = leftPane.scrollHeight - leftPane.clientHeight;
+        const maxRight = rightPane.scrollHeight - rightPane.clientHeight;
+        if (maxLeft > 0 && maxRight > 0) {
+          rightPane.scrollTop = (leftPane.scrollTop / maxLeft) * maxRight;
+        } else {
+          rightPane.scrollTop = leftPane.scrollTop;
+        }
+      };
+
+      rightPane.onscroll = () => {
+        if (isSyncingRight) {
+          isSyncingRight = false;
+          return;
+        }
+        isSyncingLeft = true;
+        const maxLeft = leftPane.scrollHeight - leftPane.clientHeight;
+        const maxRight = rightPane.scrollHeight - rightPane.clientHeight;
+        if (maxLeft > 0 && maxRight > 0) {
+          leftPane.scrollTop = (rightPane.scrollTop / maxRight) * maxLeft;
+        } else {
+          leftPane.scrollTop = rightPane.scrollTop;
+        }
+      };
+    }
+
+    // Initialize Scroll Sync on DOM Load
+    initScrollSync();
+
     function promptCustomInstruction() {
       const custom = prompt("Enter your custom AI editing prompt/instruction:");
       if (custom && custom.trim().length > 0) {
@@ -2377,6 +2639,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     }
 
     const ALL_SAVED_KEYS = ${JSON.stringify(config.allKeys || {})};
+    const ALL_SAVED_MODELS = ${JSON.stringify(config.allModels || {})};
 
     function formatMaskedKey(key) {
       if (!key || key.trim().length === 0) return "";
@@ -2466,19 +2729,63 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         }
       }
 
-      // Update Model Dropdown options instantly
+      // Update Model Dropdown options instantly based on THAT provider's saved model
       const modelSelect = document.getElementById("settings-model-select");
+      const customGroup = document.getElementById("custom-model-input-group");
+      const customInput = document.getElementById("settings-model");
+      const activeCustom = ALL_SAVED_MODELS[providerKey] || "";
+
+      if (customInput) {
+        customInput.value = activeCustom;
+      }
+
       if (modelSelect && MODEL_CATALOG[providerKey]) {
         const models = MODEL_CATALOG[providerKey];
-        modelSelect.innerHTML = '<option value="">Default Recommended Model</option>' + 
-          models.map(m => '<option value="' + m.value + '">' + m.label + ' (' + m.value + ')</option>').join("");
+        const isMatched = models.some(m => m.value === activeCustom);
+        const isCustomOption = Boolean(activeCustom && !isMatched);
+
+        modelSelect.innerHTML = '<option value="" ' + (!activeCustom ? 'selected' : '') + '>Default Recommended Model</option>' + 
+          models.map(m => '<option value="' + m.value + '" ' + (m.value === activeCustom ? 'selected' : '') + '>' + m.label + ' (' + m.value + ')</option>').join("") +
+          '<option value="__custom__" ' + (isCustomOption ? 'selected' : '') + '>\u2699\uFE0F Custom Model Override...</option>';
+
+        if (customGroup) {
+          customGroup.style.display = isCustomOption ? "flex" : "none";
+        }
+      }
+    }
+
+    function onModelSelectChange() {
+      const selectElem = document.getElementById("settings-model-select");
+      const customGroup = document.getElementById("custom-model-input-group");
+      const customInput = document.getElementById("settings-model");
+
+      if (selectElem?.value === "__custom__") {
+        if (customGroup) customGroup.style.display = "flex";
+        if (customInput) {
+          customInput.focus();
+        }
+      } else {
+        if (customGroup) customGroup.style.display = "none";
       }
     }
 
     function saveSettingsForm() {
       const provider = document.getElementById("settings-provider")?.value;
       const apiKey = document.getElementById("settings-api-key")?.value;
-      const customModel = document.getElementById("settings-model")?.value;
+      const modelSelect = document.getElementById("settings-model-select")?.value;
+      const customInput = document.getElementById("settings-model")?.value;
+
+      let customModel = "";
+      if (modelSelect === "__custom__") {
+        customModel = (customInput || "").trim();
+      } else if (modelSelect) {
+        customModel = modelSelect.trim();
+      }
+
+      if (provider) {
+        ALL_SAVED_MODELS[provider] = customModel;
+      }
+
       const customBaseUrl = document.getElementById("settings-base-url")?.value;
 
       sendAction("saveSettings", {
@@ -2507,32 +2814,21 @@ function renderReviewWorkspace(session, config, metrics, currentItem) {
     `;
   }
   return `
-    ${renderToolbar(session, config)}
+    <div class="gr-workbench">
+      ${renderSidebarPanel(session, config, metrics)}
 
-    <!-- Progress Card -->
-    <div class="gr-progress-card">
-      <div class="gr-progress-header">
-        <span>Progress: <strong>${metrics.reviewed} / ${metrics.total} items</strong> (${metrics.percentComplete}%)</span>
-        <span>Accepted: <strong style="color: var(--accent-success);">${metrics.accepted}</strong> | Rejected: <strong style="color: var(--accent-danger);">${metrics.rejected}</strong></span>
-      </div>
-      <div class="gr-progress-track">
-        <div class="gr-progress-fill" style="width: ${metrics.percentComplete}%;"></div>
-      </div>
-    </div>
+      <main class="gr-main-canvas">
+        ${renderDiffCard(currentItem, session.currentIndex, session.items.length)}
 
-    <!-- Active Item Review Card -->
-    <div class="gr-review-panel">
-      ${renderDiffCard(currentItem, session.currentIndex, session.items.length)}
-    </div>
-
-    <!-- Bottom Save Action Bar -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; flex-wrap: wrap; gap: 10px;">
-      <div style="font-size: 12px; color: var(--text-secondary);">
-        \u{1F4A1} <strong>Shortcuts:</strong> <code>A</code> Accept \xB7 <code>R</code> Reject \xB7 <code>N/P</code> Next/Prev \xB7 <code>T</code> Theme
-      </div>
-      <button class="gr-btn btn-save" onclick="sendAction('saveAndCommit')">
-        \u{1F4BE} Save & Commit Rewrites
-      </button>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; flex-wrap: wrap; gap: 10px;">
+          <div style="font-size: 12px; color: var(--text-secondary);">
+            \u{1F4A1} <strong>Shortcuts:</strong> <code>A</code> Accept \xB7 <code>R</code> Reject \xB7 <code>N/P</code> Next/Prev \xB7 <code>T</code> Theme
+          </div>
+          <button class="gr-btn btn-save" style="padding: 10px 24px; font-size: 13px;" onclick="sendAction('saveAndCommit')">
+            \u{1F4BE} Save & Commit Rewrites to Note
+          </button>
+        </div>
+      </main>
     </div>
   `;
 }
@@ -2608,9 +2904,12 @@ function renderSettingsWorkspace(config) {
       </div>
     `;
   }).join("");
+  const activeSavedModel = config.allModels && config.allModels[activeProvider] || config.customModel || "";
+  const isMatchedModel = catalog.some((m) => m.value === activeSavedModel);
+  const isCustomModelActive = Boolean(activeSavedModel && !isMatchedModel);
   const modelOptionsHtml = catalog.map((m) => {
-    return `<option value="${m.value}" ${m.value === config.customModel ? "selected" : ""}>${m.label} (${m.value})</option>`;
-  }).join("");
+    return `<option value="${m.value}" ${m.value === activeSavedModel ? "selected" : ""}>${m.label} (${m.value})</option>`;
+  }).join("") + `<option value="__custom__" ${isCustomModelActive ? "selected" : ""}>\u2699\uFE0F Custom Model Override...</option>`;
   return `
     <div style="display: flex; flex-direction: column; gap: 16px;">
       
@@ -2658,20 +2957,21 @@ function renderSettingsWorkspace(config) {
         <div id="settings-base-url-group" class="gr-form-group" style="display: ${activeProvider.includes("Ollama") ? "flex" : "none"};">
           <label class="gr-form-label" for="settings-base-url">Local Ollama Base URL</label>
           <input type="text" id="settings-base-url" class="gr-input" style="width: 100%; padding: 8px 12px;" placeholder="http://localhost:11434/v1" value="${escapeHtml(config.customBaseUrl || "http://localhost:11434/v1")}">
-          <span class="gr-form-help">Ensure Ollama is running locally (e.g. <code>ollama serve</code>).</span>
+          <span class="gr-form-help">Ensure Ollama is running with <code>OLLAMA_ORIGINS="*"</code> to allow web browser connection.</span>
         </div>
 
         <div class="gr-form-group">
           <label class="gr-form-label" for="settings-model-select">Active Model for Provider</label>
-          <select id="settings-model-select" class="gr-select" style="width: 100%; padding: 8px 12px;" onchange="document.getElementById('settings-model').value = this.value">
-            <option value="">Default Recommended Model</option>
+          <select id="settings-model-select" class="gr-select" style="width: 100%; padding: 8px 12px;" onchange="onModelSelectChange()">
+            <option value="" ${!activeSavedModel ? "selected" : ""}>Default Recommended Model</option>
             ${modelOptionsHtml}
           </select>
         </div>
 
-        <div class="gr-form-group">
-          <label class="gr-form-label" for="settings-model">Custom Model Override (Optional)</label>
-          <input type="text" id="settings-model" class="gr-input" style="width: 100%; padding: 8px 12px;" placeholder="Select from dropdown above or enter custom model ID" value="${escapeHtml(config.customModel || "")}">
+        <div id="custom-model-input-group" class="gr-form-group" style="display: ${isCustomModelActive ? "flex" : "none"};">
+          <label class="gr-form-label" for="settings-model">Enter Custom Model ID</label>
+          <input type="text" id="settings-model" class="gr-input" style="width: 100%; padding: 8px 12px;" placeholder="e.g. llama3.2:1b, mistral-nemo, gpt-4-turbo" value="${escapeHtml(activeSavedModel)}">
+          <span class="gr-form-help">Type the exact model tag or endpoint ID you wish to use.</span>
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
@@ -2712,7 +3012,7 @@ var plugin = {
       let requiresReRender = true;
       switch (action) {
         case "selectNote":
-          await launchReviewer(app);
+          await launchReviewer(app, null, true);
           requiresReRender = false;
           break;
         case "restoreSession": {
@@ -2742,6 +3042,7 @@ var plugin = {
           const settingsPayload = args[1] || {};
           const targetProvider = settingsPayload.provider;
           const apiKey = settingsPayload.apiKey;
+          const customModel = settingsPayload.customModel;
           if (typeof app.setSetting === "function") {
             if (targetProvider) {
               await app.setSetting("AI Provider", targetProvider);
@@ -2749,8 +3050,17 @@ var plugin = {
                 await app.setSetting(`${targetProvider} API Key`, apiKey.trim());
               }
             }
-            if (settingsPayload.customModel !== void 0) {
-              await app.setSetting("Custom AI Model", settingsPayload.customModel.trim());
+            if (targetProvider && customModel !== void 0) {
+              let modelMap = {};
+              try {
+                const rawModelSetting = app.settings?.["Custom AI Model"];
+                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
+                  modelMap = JSON.parse(rawModelSetting);
+                }
+              } catch (e) {
+              }
+              modelMap[targetProvider] = customModel.trim();
+              await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }
             if (settingsPayload.customBaseUrl !== void 0) {
               await app.setSetting("Custom Base URL", settingsPayload.customBaseUrl.trim());
@@ -2761,9 +3071,7 @@ var plugin = {
           }
           if (session && targetProvider) {
             session.provider = targetProvider;
-            if (settingsPayload.customModel) {
-              session.model = settingsPayload.customModel;
-            }
+            session.model = customModel && customModel.trim().length > 0 ? customModel.trim() : DEFAULT_MODELS[targetProvider] || "";
           }
           await app.alert("Settings saved successfully!");
           activeTabState = "review";
@@ -2772,16 +3080,52 @@ var plugin = {
         case "setGranularity":
           handleSetGranularity(app, args[1]);
           break;
-        case "setProvider":
-          if (session) {
-            session.provider = args[1];
+        case "setProvider": {
+          const newProvider = args[1];
+          if (newProvider) {
+            let savedModelForNewProvider = DEFAULT_MODELS[newProvider] || "";
+            try {
+              const rawModelSetting = app.settings?.["Custom AI Model"];
+              if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
+                const parsed = JSON.parse(rawModelSetting);
+                if (parsed[newProvider]) {
+                  savedModelForNewProvider = parsed[newProvider];
+                }
+              }
+            } catch (e) {
+            }
+            if (session) {
+              session.provider = newProvider;
+              session.model = savedModelForNewProvider;
+            }
+            if (typeof app.setSetting === "function") {
+              await app.setSetting("AI Provider", newProvider);
+            }
           }
           break;
-        case "setModel":
-          if (session) {
-            session.model = args[1];
+        }
+        case "setModel": {
+          const newModel = args[1];
+          const curProvider = session?.provider || app.settings?.["AI Provider"] || DEFAULT_PROVIDER;
+          if (newModel) {
+            if (session) {
+              session.model = newModel;
+            }
+            if (typeof app.setSetting === "function") {
+              let modelMap = {};
+              try {
+                const rawModelSetting = app.settings?.["Custom AI Model"];
+                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
+                  modelMap = JSON.parse(rawModelSetting);
+                }
+              } catch (e) {
+              }
+              modelMap[curProvider] = newModel.trim();
+              await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
+            }
           }
           break;
+        }
         case "setPreset":
           if (session) {
             session.promptPresetId = args[1];

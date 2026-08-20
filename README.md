@@ -1,11 +1,21 @@
 # 🧑‍🏫 Amplenote Grammar & Style Reviewer Plugin
 
-A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally inspect, diff, accept/reject, and refine grammar, structure, tone, and conciseness suggestions across your notes with full audit logging, zero-latency themes, and masked API key security.
+A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally inspect, diff, accept/reject, and refine grammar, structure, tone, and conciseness suggestions across your notes with full audit logging, synchronized dual-pane scrolling, 100% full-width workspace, 6 dynamic themes, per-provider model memory, and persistent note state.
 
 ---
 
 ## ✨ Key Features
 
+- **Direct 1-Click Fullscreen Launch & Note Memory**:
+  - Immediately opens in full screen with zero intermediate prompts.
+  - Automatically remembers and re-opens your **Last Reviewed Note** when launched from the App Menu.
+- **100% Full-Width 2-Column Workbench**:
+  - **Left Sidebar Inspector**: AI engine selector, model switcher (only saved providers), segmented granularity switcher (`Full Note`, `Paragraph`, `Sentence`), prompt presets, live progress tracker, and hotkeys.
+  - **Expansive Main Canvas**: 100% screen width and viewport height dedicated to side-by-side note diffs and review controls.
+- **Synchronized Dual-Pane Scrolling**:
+  - Bidirectional proportional scroll synchronization between Original Text and AI Suggestion diff panes for long paragraphs and `Full Note` reviews.
+- **Per-Provider Isolated Model Persistence**:
+  - Model selections and `Custom Model Override...` entries are saved and remembered **independently per provider** via clean JSON formatting within existing settings, avoiding any table schema changes.
 - **Multi-AI Provider Engine (August 2026 Lineup)**:
   1. **OpenRouter**: Free & Paid model pool (`openai/gpt-oss-120b:free`, `deepseek/deepseek-v4-flash:free`, `qwen/qwen3.6-27b:free`, Auto Router).
   2. **Google Gemini**: Fast `gemini-3.5-flash-lite`, `gemini-3.7-flash`, and deep `gemini-3.1-pro`.
@@ -15,7 +25,8 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   6. **Ollama / Local AI**: Seamless support for Ollama Cloud (`deepseek-v4-flash:cloud`, `kimi-k3:cloud`, `gpt-oss:120b:cloud`) or local offline models.
   7. **OpenAI**: Flagship `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, and `gpt-5.4`.
   8. **Anthropic Claude**: Gold-standard copyediting via `claude-haiku-4-5-20251001`, `claude-sonnet-5`, and `claude-opus-4-8`.
-- **Interactive Full-Screen & Sidebar Workspace**: Modern split/diff reviewer highlighting additions, deletions, and replacements with zero-lag responsiveness.
+- **Dynamic Model Selection & Custom Override**:
+  - Select from pre-configured provider models or choose `⚙️ Custom Model Override...` to input any custom model ID or tag.
 - **6 Dynamic Aesthetic Themes with 1-Click Smooth Cycler**:
   - 🌌 `Midnight Slate` (Default deep slate with electric blue accents)
   - ❄️ `Nord Arctic` (Crisp arctic slate with ice-blue highlights)
@@ -29,10 +40,6 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - Displays masked key indicators with the last 4 digits visible (`🔒 Saved Key: ••••••••••••a8F9`).
   - Interactive `👁️ Show / Hide` toggle to preview raw keys while typing.
   - Dedicated `🗑️ Clear` button to safely wipe or replace saved keys.
-- **Granular Review Modes**:
-  - `Full Note`: Review and rewrite the entire document in one unified pass.
-  - `Paragraph-by-Paragraph`: Focused paragraph polishing.
-  - `Sentence-by-Sentence`: Granular sentence fine-tuning.
 - **Power Keyboard Shortcuts**:
   - `A`: Accept active suggestion
   - `R`: Reject suggestion / keep original
@@ -79,6 +86,9 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 | `setting` | `Custom AI Model` |
 | `setting` | `Custom Base URL` |
 
+> [!NOTE]
+> No new settings rows are needed! The plugin automatically manages per-provider model overrides and key preferences within these standard settings.
+
 3. **Insert Code Block**: Below the table, create a Javascript code block (```` ```javascript ````).
 4. **Paste Compiled Code**: Copy the bundle from [`build/grammar-reviewer.compiled.js`](https://github.com/krishnakanthb13/amplenote_stg_plugins/blob/main/anp-23-grammar-reviewer/build/grammar-reviewer.compiled.js) and paste it inside the code block.
 5. **Activate**: Go to **Account Settings** -> **Plugins**, and select the note you just created.
@@ -90,15 +100,16 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 1. **Configure Provider & Keys**:
    - Open the plugin embed and click **⚙️ Settings**.
    - Select your provider card and paste your key ([OpenRouter](https://openrouter.ai/keys), [Google Gemini](https://aistudio.google.com/app/apikey), [Groq](https://console.groq.com/keys), [Mistral](https://console.mistral.ai/api-keys), [DeepSeek](https://platform.deepseek.com), [OpenAI](https://platform.openai.com), [Anthropic](https://console.anthropic.com), or run [Ollama](https://ollama.com) locally).
-   - Select your preferred model from the live dropdown and click **💾 Save Settings**.
+   - *Note for Ollama users*: Set environment variable `OLLAMA_ORIGINS="*"` before starting Ollama to allow web browser connections.
+   - Select your preferred model or choose `⚙️ Custom Model Override...` and click **💾 Save Settings**.
 2. **Launch Review**:
-   - Open any note and choose **Note Options > Open Dashboard** or select **📂 Select Note** inside the embed.
+   - Open any note and choose **Note Options > Open Dashboard** (opens directly in full screen).
 3. **Step Through Suggestions**:
    - `[✓ Accept]` (`A`): Adopts the proposed AI improvement.
    - `[✗ Reject]` (`R`): Keeps your original text.
    - `[✏️ Edit]`: Manually edits the suggestion inline.
    - `[🔄 Re-Review]`: Runs a new prompt on that specific chunk.
-4. **Save & Commit**: Click **💾 Save & Commit Rewrites** to update your source note and generate audit logs (`-reports/-grammar/-changes` & `-reports/-grammar/-history`).
+4. **Save & Commit**: Click **💾 Save & Commit Rewrites to Note** to update your source note and generate audit logs (`-reports/-grammar/-changes` & `-reports/-grammar/-history`).
 
 ---
 
