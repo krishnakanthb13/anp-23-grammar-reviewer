@@ -57,6 +57,11 @@ const plugin = {
           clearActiveSession();
           break;
 
+        case "refreshHistory":
+          activeTabState = "history";
+          requiresReRender = true;
+          break;
+
         case "setTab":
           activeTabState = args[1] || "review";
           requiresReRender = false;
@@ -237,19 +242,28 @@ const plugin = {
 
         case "saveAndCommit":
           if (session) {
+            const auditEnabled = Boolean(args[1]);
             const confirmSave = await app.prompt("Commit Grammar Review Rewrites?", {
               inputs: [
                 {
-                  label: "Apply changes to source note and generate audit logs?",
+                  label: "Also create extra changes & history report notes (-reports/-grammar/*)? (Optional — Amplenote natively captures note revision history)",
                   type: "checkbox",
-                  value: true
+                  value: auditEnabled
                 }
               ]
             });
 
-            if (confirmSave) {
-              const res = await handleSaveAndCommit(app);
-              await app.alert(`Changes saved successfully!\n\nChanges report created: ${res.changesNoteUUID}\nHistory log archived.`);
+            if (confirmSave !== null && confirmSave !== false) {
+              const shouldCreateNotes = typeof confirmSave === "object"
+                ? Boolean(confirmSave["Also create extra changes & history report notes (-reports/-grammar/*)? (Optional — Amplenote natively captures note revision history)"] ?? confirmSave[0])
+                : Boolean(confirmSave);
+
+              const res = await handleSaveAndCommit(app, shouldCreateNotes);
+              if (shouldCreateNotes && res.changesNoteUUID) {
+                await app.alert(`Changes saved to source note!\n\nAudit report created: ${res.changesNoteUUID}`);
+              } else {
+                await app.alert("Changes successfully saved to source note!");
+              }
             }
           }
           break;

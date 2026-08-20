@@ -1,5 +1,24 @@
 # Release Notes: Amplenote Grammar & Style Reviewer
 
+## v0.0.3 (2026-08-20)
+
+### 🚀 New Features
+- **Clean Side-by-Side Diff Checker**: Redesigned the diff engine to render clean, readable rewritten prose on the right pane with emerald green insertion highlights, and deleted words in soft red on the left pane.
+- **Interactive Diff View Switcher**: Added a 0ms client-side segmented toggle (`✨ Clean Prose` vs `🔀 Inline Diff`) directly on the suggestion header.
+- **Optional Audit Notes (Turned OFF by Default)**: By default, reviews commit directly to the source note without creating cluttering report notes, since Amplenote natively tracks revision history. An optional toggle in Settings, History, and Save confirmation allows creating `-reports/-grammar/*` notes on demand.
+- **Amplenote Native Revision History Legend**: Added an informative card detailing Amplenote's built-in 10-minute save point version history accessible via `... (Note Options) > View revision history`.
+- **Human-Readable Note Naming & Formatting**: Newly generated notes now have descriptive names (`Grammar Changes: <Title> (<Date>)` and `Grammar History: <Title> (<Date>)`), formatted summary metadata headers, and itemized breakdown tables.
+
+### ⚡ Improvements
+- **Sub-Word & Punctuation Precision**: Fine-grained tokenization in the diff engine preserves punctuation and hyphenated terms without awkward word chopping.
+- **1-Click History Refresh**: Added `🔄 Refresh History` button to reload and discover archived review sessions on demand.
+
+### 🐛 Bug Fixes
+- **History Record Deduplication**: Prioritized dedicated history notes to eliminate duplicate rows from companion markdown change reports.
+- **Isolated Cloud Endpoints**: Ensured custom base URLs are isolated to Ollama, preventing cloud providers (Mistral, Gemini, Groq, etc.) from attempting loopback localhost connections.
+
+---
+
 ## v0.0.2 (2026-08-20)
 
 ### 🚀 New Features

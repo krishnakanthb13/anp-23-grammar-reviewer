@@ -1,11 +1,19 @@
 # 🧑‍🏫 Amplenote Grammar & Style Reviewer Plugin
 
-A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally inspect, diff, accept/reject, and refine grammar, structure, tone, and conciseness suggestions across your notes with full audit logging, synchronized dual-pane scrolling, 100% full-width workspace, 6 dynamic themes, per-provider model memory, and persistent note state.
+A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally inspect, diff, accept/reject, and refine grammar, structure, tone, and conciseness suggestions across your notes with clean side-by-side readable diffs, synchronized dual-pane scrolling, 100% full-width workspace, 6 dynamic themes, per-provider model memory, and optional audit logging (turned off by default).
 
 ---
 
 ## ✨ Key Features
 
+- **Clean Side-by-Side Readable Diff Checker**:
+  - **Left Pane (Original Draft)**: Displays original text with words to be replaced or removed highlighted in soft red strike-through.
+  - **Right Pane (AI Suggestion)**: Displays **clean, fully readable rewritten prose** with improved/inserted words highlighted in soft emerald green.
+  - **Interactive Mode Switcher**: Toggle between `✨ Clean Prose` (readable rewrite) and `🔀 Inline Diff` (interleaved side-by-side diff) in 0ms.
+- **Optional Audit Notes & Clean Notebook Default**:
+  - **Turned OFF by default**: Directly writes accepted rewrites to your source note without creating cluttering report notes.
+  - **Amplenote Native Version History**: Integrates with Amplenote's built-in 10-minute save point version history (`... > View revision history`).
+  - **Optional Audit Logging**: Users can enable `-reports/-grammar/*` archive notes in Settings or History if dedicated iteration snapshots are desired.
 - **Direct 1-Click Fullscreen Launch & Note Memory**:
   - Immediately opens in full screen with zero intermediate prompts.
   - Automatically remembers and re-opens your **Last Reviewed Note** when launched from the App Menu.
@@ -15,7 +23,7 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 - **Synchronized Dual-Pane Scrolling**:
   - Bidirectional proportional scroll synchronization between Original Text and AI Suggestion diff panes for long paragraphs and `Full Note` reviews.
 - **Per-Provider Isolated Model Persistence**:
-  - Model selections and `Custom Model Override...` entries are saved and remembered **independently per provider** via clean JSON formatting within existing settings, avoiding any table schema changes.
+  - Model selections and `Custom Model Override...` entries are saved and remembered **independently per provider** via clean JSON formatting within existing settings, avoiding table schema changes.
 - **Multi-AI Provider Engine (August 2026 Lineup)**:
   1. **OpenRouter**: Free & Paid model pool (`openai/gpt-oss-120b:free`, `deepseek/deepseek-v4-flash:free`, `qwen/qwen3.6-27b:free`, Auto Router).
   2. **Google Gemini**: Fast `gemini-3.5-flash-lite`, `gemini-3.7-flash`, and deep `gemini-3.1-pro`.
@@ -25,8 +33,6 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   6. **Ollama / Local AI**: Seamless support for Ollama Cloud (`deepseek-v4-flash:cloud`, `kimi-k3:cloud`, `gpt-oss:120b:cloud`) or local offline models.
   7. **OpenAI**: Flagship `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, and `gpt-5.4`.
   8. **Anthropic Claude**: Gold-standard copyediting via `claude-haiku-4-5-20251001`, `claude-sonnet-5`, and `claude-opus-4-8`.
-- **Dynamic Model Selection & Custom Override**:
-  - Select from pre-configured provider models or choose `⚙️ Custom Model Override...` to input any custom model ID or tag.
 - **6 Dynamic Aesthetic Themes with 1-Click Smooth Cycler**:
   - 🌌 `Midnight Slate` (Default deep slate with electric blue accents)
   - ❄️ `Nord Arctic` (Crisp arctic slate with ice-blue highlights)
@@ -36,10 +42,6 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - ☀️ `Clean Daylight` (High-contrast bright paper theme for daytime editing)
 - **Zero-Latency Client-Side Tabs**:
   - Instantaneous switching between `Reviewer`, `History Logs`, and `⚙️ Settings` without iframe tearing or white flash.
-- **Masked API Key Security & Management**:
-  - Displays masked key indicators with the last 4 digits visible (`🔒 Saved Key: ••••••••••••a8F9`).
-  - Interactive `👁️ Show / Hide` toggle to preview raw keys while typing.
-  - Dedicated `🗑️ Clear` button to safely wipe or replace saved keys.
 - **Power Keyboard Shortcuts**:
   - `A`: Accept active suggestion
   - `R`: Reject suggestion / keep original
@@ -56,10 +58,6 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - Add Subtle Humor & Wit
   - Academic & Analytical Tone
   - *Custom user prompts supported.*
-- **Safe Write-back & Dual-Stream Audit Trail**:
-  - Primary rewrite with confirmation modal.
-  - Human-readable iteration note tagged `-reports/-grammar/-changes` with source backlinks.
-  - Machine-readable JSON audit history tagged `-reports/-grammar/-history`, viewable anytime via the plugin's built-in history viewer.
 
 ---
 
@@ -109,7 +107,7 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
    - `[✗ Reject]` (`R`): Keeps your original text.
    - `[✏️ Edit]`: Manually edits the suggestion inline.
    - `[🔄 Re-Review]`: Runs a new prompt on that specific chunk.
-4. **Save & Commit**: Click **💾 Save & Commit Rewrites to Note** to update your source note and generate audit logs (`-reports/-grammar/-changes` & `-reports/-grammar/-history`).
+4. **Save & Commit**: Click **💾 Save & Commit Rewrites to Note** to update your source note.
 
 ---
 

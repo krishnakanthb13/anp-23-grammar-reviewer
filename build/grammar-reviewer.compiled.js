@@ -292,7 +292,7 @@ function isInspectableText(text) {
 // anp-23-grammar-reviewer/lib/engine/diffEngine.js
 function tokenizeWords(text) {
   if (!text) return [];
-  return text.match(/\S+|\s+/g) || [];
+  return text.match(/[\w'-]+|[^\w\s]|\s+/g) || [];
 }
 function computeTokenDiff(a, b) {
   const n = a.length;
@@ -1227,74 +1227,96 @@ function handleSetGranularity(app, newMode) {
 
 // anp-23-grammar-reviewer/lib/data/reportGenerator.js
 function generateChangesReport({ session, sourceNoteTitle, sourceNoteUUID, finalContent }) {
-  const timestamp = Math.floor(Date.now() / 1e3).toString();
-  const dateStr = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").substring(0, 19) + " UTC";
+  const now = /* @__PURE__ */ new Date();
+  const dateStr = now.toISOString().replace("T", " ").substring(0, 16);
+  const fullDateStr = now.toISOString().replace("T", " ").substring(0, 19) + " UTC";
   const metrics = session.getMetrics();
-  const sourceLink = sourceNoteUUID ? `[${sourceNoteTitle || "Source Note"}](https://www.amplenote.com/notes/${sourceNoteUUID})` : sourceNoteTitle || "Untitled Note";
-  const md = `# Grammar Review Changes Log \u2014 ${timestamp}
+  const titleName = sourceNoteTitle || "Untitled Note";
+  const sourceLink = sourceNoteUUID ? `[${titleName}](https://www.amplenote.com/notes/${sourceNoteUUID})` : titleName;
+  const promptName = session.customPrompt ? `Custom: "${session.customPrompt}"` : `Preset: ${session.promptPresetId.replace(/_/g, " ")}`;
+  const md = `# \u{1F4DD} Grammar Review Changes: ${titleName}
 
 > **Source Note:** ${sourceLink}  
-> **Review Date:** ${dateStr}  
-> **AI Provider / Model:** \`${session.provider}\` / \`${session.model || "default"}\`  
-> **Granularity Mode:** \`${session.granularity}\`  
-> **Prompt Applied:** ${session.customPrompt ? `*Custom Prompt:* "${session.customPrompt}"` : `*Preset:* ${session.promptPresetId}`}  
-> **Diff Summary:** \`+${metrics.totalAdditions} words added\`, \`-${metrics.totalDeletions} words removed\` (Reviewed: ${metrics.reviewed}/${metrics.total}, Accepted: ${metrics.accepted}, Rejected: ${metrics.rejected})
+> **Review Date:** ${fullDateStr}  
+> **AI Engine:** \`${session.provider}\` \xB7 Model: \`${session.model || "default"}\`  
+> **Granularity:** \`${session.granularity.toUpperCase()}\` \xB7 **Style:** *${promptName}*  
+> **Diff Summary:** \`+${metrics.totalAdditions} words added\`, \`-${metrics.totalDeletions} words removed\` (Accepted: **${metrics.accepted}**, Rejected: **${metrics.rejected}**)
 
 ---
 
-## \u{1F4DD} Final Reviewed Content
+## \u{1F4CA} Summary of Changes
+
+${generateItemChangesTable(session.items)}
+
+---
+
+## \u{1F4C4} Complete Revised Document
 
 ${finalContent}
 
 ---
 
-## \u{1F504} Review Iteration History
+## \u{1F4DC} Original Document Snapshot
 
-### Initial Content
+<details>
+<summary>Click to view original text before review</summary>
+
 \`\`\`markdown
 ${session.originalContent}
 \`\`\`
 
-### Iteration ${session.iteration || 1} Review Details
-- **Timestamp:** ${dateStr}
-- **Accepted Improvements:** ${metrics.accepted}
-- **Rejected/Kept Original:** ${metrics.rejected}
-
-${generateItemChangesList(session.items)}
+</details>
 
 ---
-*Generated automatically by Amplenote Grammar Reviewer Plugin*
+*Generated automatically by Amplenote Grammar & Style Reviewer Plugin*
 `;
   return {
-    name: timestamp,
+    name: `Grammar Changes: ${titleName} (${dateStr})`,
     tags: [TAG_GRAMMAR_CHANGES],
     content: md
   };
 }
-function generateItemChangesList(items) {
-  const changedItems = items.filter((i) => i.isInspectable && i.diff && i.diff.hasChanges);
-  if (changedItems.length === 0) {
-    return "*No specific sentence/paragraph changes were applied.*";
+function generateItemChangesTable(items) {
+  const inspectableItems = items.filter((i) => i.isInspectable);
+  if (inspectableItems.length === 0) {
+    return "*No inspectable items in this review pass.*";
   }
-  return changedItems.map((item, idx) => {
-    const statusIcon = item.status === "accepted" ? "\u2705 Accepted" : item.status === "modified" ? "\u270F\uFE0F Modified" : "\u274C Rejected";
-    return `#### Change #${idx + 1} (${statusIcon})
-- **Original:** ${item.original}
-- **Suggested / Applied:** ${item.status === "modified" ? item.customEdit : item.suggestion}
+  const changeBlocks = inspectableItems.map((item, idx) => {
+    let statusBadge = "\u274C Kept Original";
+    let appliedText = item.original;
+    if (item.status === "accepted") {
+      statusBadge = "\u2705 Accepted";
+      appliedText = item.suggestion || item.original;
+    } else if (item.status === "modified") {
+      statusBadge = "\u270F\uFE0F Manually Edited";
+      appliedText = item.customEdit || item.suggestion || item.original;
+    }
+    return `### Item #${idx + 1} (${statusBadge} \xB7 *${item.type}*)
+- **Original Draft:**  
+  ${item.original}
+- **Applied Output:**  
+  ${appliedText}
 `;
   }).join("\n");
+  return changeBlocks;
 }
 
 // anp-23-grammar-reviewer/lib/data/historyManager.js
 function generateHistoryRecord({ session, sourceNoteTitle, sourceNoteUUID, finalContent }) {
-  const timestamp = Math.floor(Date.now() / 1e3).toString();
+  const now = /* @__PURE__ */ new Date();
+  const timestamp = Math.floor(now.getTime() / 1e3);
+  const dateStr = now.toISOString().replace("T", " ").substring(0, 16);
+  const fullDateStr = now.toISOString().replace("T", " ").substring(0, 19) + " UTC";
+  const metrics = session.getMetrics();
+  const titleName = sourceNoteTitle || "Untitled Note";
+  const sourceLink = sourceNoteUUID ? `[${titleName}](https://www.amplenote.com/notes/${sourceNoteUUID})` : titleName;
   const record = {
     schemaVersion: 1,
-    timestamp: parseInt(timestamp, 10),
-    isoDate: (/* @__PURE__ */ new Date()).toISOString(),
+    timestamp,
+    isoDate: now.toISOString(),
     sourceNote: {
       uuid: sourceNoteUUID,
-      title: sourceNoteTitle
+      title: titleName
     },
     session: {
       id: session.sessionId,
@@ -1318,41 +1340,86 @@ function generateHistoryRecord({ session, sourceNoteTitle, sourceNoteUUID, final
     originalContent: session.originalContent,
     finalContent
   };
-  const markdownContent = `# Grammar Review History Record (${timestamp})
+  const markdownContent = `# \u{1F4DC} Grammar Review History: ${titleName}
+
+> **Source Note:** ${sourceLink}  
+> **Timestamp:** ${fullDateStr}  
+> **AI Engine:** \`${session.provider}\` \xB7 Model: \`${session.model || "default"}\`  
+> **Changes:** **${metrics.accepted}** accepted, **${metrics.rejected}** rejected (out of ${metrics.total} items)
+
+---
+
+## \u{1F4BE} Audit Log Payload
 
 \`\`\`json
 ${JSON.stringify(record, null, 2)}
 \`\`\`
 `;
   return {
-    name: timestamp,
+    name: `Grammar History: ${titleName} (${dateStr})`,
     tags: [TAG_GRAMMAR_HISTORY],
     content: markdownContent
   };
 }
 function parseHistoryNotes(notes = []) {
-  const records = [];
+  const jsonRecords = [];
+  const fallbackRecords = [];
+  const knownTimestamps = /* @__PURE__ */ new Set();
+  const knownSourceNoteTimestamps = /* @__PURE__ */ new Set();
   for (const note of notes) {
     const raw = note.body || note.content || "";
     const match = raw.match(/```json\s*([\s\S]*?)\s*```/);
     if (match && match[1]) {
       try {
         const parsed = JSON.parse(match[1]);
-        records.push({
+        const ts = parsed.timestamp || parseInt(note.name, 10) || 0;
+        const key = `${parsed.sourceNote?.uuid || ""}_${Math.floor(ts / 60)}`;
+        knownTimestamps.add(ts);
+        knownSourceNoteTimestamps.add(key);
+        jsonRecords.push({
           noteUUID: note.uuid,
           noteName: note.name,
-          ...parsed
+          ...parsed,
+          timestamp: ts
         });
       } catch (err) {
         console.warn("[GrammarReviewer] Could not parse history record for note:", note.uuid, err);
       }
+    } else if (raw && (raw.includes("Grammar Review") || raw.includes("Grammar & Style") || raw.includes("Changes Report"))) {
+      const titleMatch = raw.match(/# (?:Grammar Review )?(?:Changes )?Report:?\s*(.*)/i) || raw.match(/Source Note:\s*\[([^\]]+)\]/i);
+      const dateMatch = raw.match(/\*\*Date:\*\*\s*(.*)/i) || raw.match(/Date:\s*(.*)/i);
+      const changesMatch = raw.match(/(\d+)\s*(?:changes?|replacements?|items?)/i);
+      const providerMatch = raw.match(/Provider:\s*([^\n\r]+)/i);
+      const ts = parseInt(note.name, 10) || (dateMatch ? Math.floor(new Date(dateMatch[1]).getTime() / 1e3) : 0);
+      fallbackRecords.push({
+        noteUUID: note.uuid,
+        noteName: note.name,
+        timestamp: ts || Math.floor(Date.now() / 1e3),
+        isoDate: dateMatch ? dateMatch[1].trim() : (/* @__PURE__ */ new Date()).toISOString(),
+        sourceNote: {
+          uuid: note.uuid,
+          title: titleMatch ? titleMatch[1].trim() : note.name || "Grammar Review"
+        },
+        session: {
+          provider: providerMatch ? providerMatch[1].trim() : "AI Review",
+          granularity: "review",
+          metrics: { accepted: changesMatch ? parseInt(changesMatch[1], 10) : 1 }
+        }
+      });
     }
   }
-  return records.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  const finalRecords = [...jsonRecords];
+  for (const fb of fallbackRecords) {
+    const key = `${fb.sourceNote?.uuid || ""}_${Math.floor(fb.timestamp / 60)}`;
+    if (!knownTimestamps.has(fb.timestamp) && !knownSourceNoteTimestamps.has(key)) {
+      finalRecords.push(fb);
+    }
+  }
+  return finalRecords.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 }
 
 // anp-23-grammar-reviewer/lib/features/saveHandler.js
-async function handleSaveAndCommit(app) {
+async function handleSaveAndCommit(app, createAuditNotes = false) {
   const session = getActiveSession();
   if (!session) {
     throw new Error("No active review session to save.");
@@ -1360,25 +1427,37 @@ async function handleSaveAndCommit(app) {
   const finalContent = session.getReconstructedContent();
   const noteUUID = session.noteUUID;
   await app.replaceNoteContent({ uuid: noteUUID }, finalContent);
-  const changesReport = generateChangesReport({
-    session,
-    sourceNoteTitle: session.noteTitle,
-    sourceNoteUUID: session.noteUUID,
-    finalContent
-  });
-  const changesNoteUUID = await app.createNote(changesReport.name, changesReport.tags);
-  if (changesNoteUUID) {
-    await app.insertNoteContent({ uuid: changesNoteUUID }, changesReport.content);
-  }
-  const historyRecord = generateHistoryRecord({
-    session,
-    sourceNoteTitle: session.noteTitle,
-    sourceNoteUUID: session.noteUUID,
-    finalContent
-  });
-  const historyNoteUUID = await app.createNote(historyRecord.name, historyRecord.tags);
-  if (historyNoteUUID) {
-    await app.insertNoteContent({ uuid: historyNoteUUID }, historyRecord.content);
+  let changesNoteUUID = null;
+  let historyNoteUUID = null;
+  if (createAuditNotes) {
+    try {
+      const changesReport = generateChangesReport({
+        session,
+        sourceNoteTitle: session.noteTitle,
+        sourceNoteUUID: session.noteUUID,
+        finalContent
+      });
+      changesNoteUUID = await app.createNote(changesReport.name, changesReport.tags);
+      if (changesNoteUUID) {
+        await app.insertNoteContent({ uuid: changesNoteUUID }, changesReport.content);
+      }
+    } catch (e) {
+      console.warn("[GrammarReviewer] Could not create changes report note:", e);
+    }
+    try {
+      const historyRecord = generateHistoryRecord({
+        session,
+        sourceNoteTitle: session.noteTitle,
+        sourceNoteUUID: session.noteUUID,
+        finalContent
+      });
+      historyNoteUUID = await app.createNote(historyRecord.name, historyRecord.tags);
+      if (historyNoteUUID) {
+        await app.insertNoteContent({ uuid: historyNoteUUID }, historyRecord.content);
+      }
+    } catch (e) {
+      console.warn("[GrammarReviewer] Could not create history note:", e);
+    }
   }
   return {
     success: true,
@@ -1390,18 +1469,68 @@ async function handleSaveAndCommit(app) {
 // anp-23-grammar-reviewer/lib/features/historyViewer.js
 async function loadHistoryRecords(app) {
   try {
-    const notes = await app.filterNotes({ tag: TAG_GRAMMAR_HISTORY });
-    if (!notes || notes.length === 0) {
+    const noteMap = /* @__PURE__ */ new Map();
+    const historyQueries = [
+      { tag: TAG_GRAMMAR_HISTORY },
+      { tag: "reports/grammar/history" },
+      { query: "tag:-reports/-grammar/-history" },
+      { query: "tag:reports/grammar/history" },
+      { query: "Grammar Review History Record" }
+    ];
+    for (const q of historyQueries) {
+      try {
+        const found = await app.filterNotes(q);
+        if (Array.isArray(found)) {
+          for (const n of found) {
+            if (n && n.uuid && !noteMap.has(n.uuid)) {
+              noteMap.set(n.uuid, n);
+            }
+          }
+        }
+      } catch (e) {
+      }
+    }
+    if (noteMap.size === 0) {
+      const fallbackQueries = [
+        { tag: TAG_GRAMMAR_CHANGES },
+        { tag: "reports/grammar/changes" },
+        { query: "tag:-reports/-grammar/-changes" },
+        { query: "tag:reports/grammar/changes" }
+      ];
+      for (const q of fallbackQueries) {
+        try {
+          const found = await app.filterNotes(q);
+          if (Array.isArray(found)) {
+            for (const n of found) {
+              if (n && n.uuid && !noteMap.has(n.uuid)) {
+                noteMap.set(n.uuid, n);
+              }
+            }
+          }
+        } catch (e) {
+        }
+      }
+    }
+    if (noteMap.size === 0) {
       return [];
     }
     const populatedNotes = [];
-    for (const n of notes.slice(0, 30)) {
-      const body = await app.getNoteContent({ uuid: n.uuid });
-      populatedNotes.push({
-        uuid: n.uuid,
-        name: n.name,
-        body
-      });
+    const notesArray = Array.from(noteMap.values()).slice(0, 40);
+    for (const n of notesArray) {
+      try {
+        const body = await app.getNoteContent({ uuid: n.uuid });
+        populatedNotes.push({
+          uuid: n.uuid,
+          name: n.name,
+          body
+        });
+      } catch (err) {
+        populatedNotes.push({
+          uuid: n.uuid,
+          name: n.name,
+          body: ""
+        });
+      }
     }
     return parseHistoryNotes(populatedNotes);
   } catch (err) {
@@ -1412,13 +1541,16 @@ async function loadHistoryRecords(app) {
 
 // anp-23-grammar-reviewer/lib/ui/styles.css.js
 var EMBED_STYLES = `
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 :root {
   /* Default Midnight Theme */
   --bg-primary: #0b0f19;
   --bg-secondary: #131b2e;
-  --bg-card: #1a233a;
+  --bg-card: #182238;
   --bg-card-hover: #222f4d;
-  --border-color: #273553;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --border-subtle: rgba(255, 255, 255, 0.05);
   --border-active: #3b82f6;
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
@@ -1426,15 +1558,18 @@ var EMBED_STYLES = `
   --accent-primary: #3b82f6;
   --accent-hover: #2563eb;
   --accent-success: #10b981;
-  --accent-success-bg: rgba(16, 185, 129, 0.18);
+  --accent-success-bg: rgba(16, 185, 129, 0.15);
   --accent-danger: #ef4444;
-  --accent-danger-bg: rgba(239, 68, 68, 0.18);
+  --accent-danger-bg: rgba(239, 68, 68, 0.15);
   --accent-warning: #f59e0b;
+  --radius-xs: 4px;
   --radius-sm: 6px;
   --radius-md: 10px;
   --radius-lg: 14px;
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Helvetica, Arial, sans-serif;
-  --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --btn-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 /* Theme: Nord Arctic */
@@ -1443,11 +1578,12 @@ var EMBED_STYLES = `
   --bg-secondary: #2e3440;
   --bg-card: #3b4252;
   --bg-card-hover: #434c5e;
-  --border-color: #4c566a;
+  --border-color: rgba(255, 255, 255, 0.1);
+  --border-subtle: rgba(255, 255, 255, 0.06);
   --border-active: #88c0d0;
   --text-primary: #eceff4;
   --text-secondary: #d8dee9;
-  --text-muted: #e5e9f0;
+  --text-muted: #9aa8be;
   --accent-primary: #88c0d0;
   --accent-hover: #81a1c1;
   --accent-success: #a3be8c;
@@ -1455,16 +1591,17 @@ var EMBED_STYLES = `
   --accent-danger: #bf616a;
   --accent-danger-bg: rgba(191, 97, 106, 0.2);
   --accent-warning: #ebcb8b;
-  --card-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
 }
 
 /* Theme: Glassmorphism */
 [data-theme="glass"] {
   --bg-primary: #0b1329;
   --bg-secondary: #16203a;
-  --bg-card: #1f2d4e;
+  --bg-card: #1e2c4f;
   --bg-card-hover: #293a62;
-  --border-color: #2b3d68;
+  --border-color: rgba(56, 189, 248, 0.15);
+  --border-subtle: rgba(56, 189, 248, 0.08);
   --border-active: #38bdf8;
   --text-primary: #f8fafc;
   --text-secondary: #cbd5e1;
@@ -1476,7 +1613,7 @@ var EMBED_STYLES = `
   --accent-danger: #fb7185;
   --accent-danger-bg: rgba(251, 113, 133, 0.2);
   --accent-warning: #facc15;
-  --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.35);
 }
 
 /* Theme: Emerald Forest */
@@ -1485,7 +1622,8 @@ var EMBED_STYLES = `
   --bg-secondary: #0b2e23;
   --bg-card: #124334;
   --bg-card-hover: #185442;
-  --border-color: #1b5e4a;
+  --border-color: rgba(52, 211, 153, 0.15);
+  --border-subtle: rgba(52, 211, 153, 0.08);
   --border-active: #10b981;
   --text-primary: #ecfdf5;
   --text-secondary: #a7f3d0;
@@ -1497,7 +1635,7 @@ var EMBED_STYLES = `
   --accent-danger: #f87171;
   --accent-danger-bg: rgba(248, 113, 113, 0.2);
   --accent-warning: #fbbf24;
-  --card-shadow: 0 4px 16px rgba(6, 30, 22, 0.4);
+  --card-shadow: 0 4px 20px rgba(6, 30, 22, 0.4);
 }
 
 /* Theme: Cyber Violet */
@@ -1506,7 +1644,8 @@ var EMBED_STYLES = `
   --bg-secondary: #1a102f;
   --bg-card: #271947;
   --bg-card-hover: #352260;
-  --border-color: #442b7a;
+  --border-color: rgba(168, 85, 247, 0.2);
+  --border-subtle: rgba(168, 85, 247, 0.1);
   --border-active: #a855f7;
   --text-primary: #faf5ff;
   --text-secondary: #e9d5ff;
@@ -1518,16 +1657,17 @@ var EMBED_STYLES = `
   --accent-danger: #f43f5e;
   --accent-danger-bg: rgba(244, 63, 94, 0.2);
   --accent-warning: #fbbf24;
-  --card-shadow: 0 4px 18px rgba(168, 85, 247, 0.15);
+  --card-shadow: 0 4px 24px rgba(168, 85, 247, 0.2);
 }
 
 /* Theme: Clean Daylight (Light Mode) */
 [data-theme="light"] {
-  --bg-primary: #f1f5f9;
+  --bg-primary: #f8fafc;
   --bg-secondary: #ffffff;
-  --bg-card: #f8fafc;
+  --bg-card: #f1f5f9;
   --bg-card-hover: #e2e8f0;
-  --border-color: #cbd5e1;
+  --border-color: #e2e8f0;
+  --border-subtle: #f1f5f9;
   --border-active: #2563eb;
   --text-primary: #0f172a;
   --text-secondary: #475569;
@@ -1539,7 +1679,8 @@ var EMBED_STYLES = `
   --accent-danger: #dc2626;
   --accent-danger-bg: rgba(220, 38, 38, 0.12);
   --accent-warning: #d97706;
-  --card-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --btn-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 * {
@@ -1557,16 +1698,17 @@ html {
 }
 
 body {
-  font-family: var(--font-family);
+  font-family: var(--font-sans);
   background-color: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.5;
   min-height: 100%;
   width: 100%;
-  padding: 12px 16px 40px 16px;
+  padding: 14px 18px 48px 18px;
   overflow-y: auto;
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Themed Scrollbars */
@@ -1585,7 +1727,7 @@ body {
   background: var(--accent-primary);
 }
 
-/* Full Width Container */
+/* 100% Full Width Container */
 .gr-container {
   width: 100%;
   max-width: 100%;
@@ -1596,7 +1738,7 @@ body {
   min-height: 100%;
 }
 
-/* Top Header Bar */
+/* Top Navigation Header Bar */
 .gr-header {
   position: sticky;
   top: 0;
@@ -1609,34 +1751,42 @@ body {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   box-shadow: var(--card-shadow);
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .gr-title-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .gr-logo {
   font-size: 20px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  padding: 4px 8px;
+  padding: 5px 9px;
   border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .gr-title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -0.2px;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .gr-subtitle {
   font-size: 12px;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .gr-header-actions {
@@ -1648,7 +1798,7 @@ body {
 
 .gr-nav-tabs {
   display: flex;
-  gap: 3px;
+  gap: 2px;
   background: var(--bg-primary);
   padding: 3px;
   border-radius: var(--radius-sm);
@@ -1660,10 +1810,12 @@ body {
   border: none;
   color: var(--text-secondary);
   padding: 6px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  font-family: var(--font-sans);
+  transition: all 0.15s ease;
 }
 
 .gr-tab-btn:hover {
@@ -1673,13 +1825,14 @@ body {
 .gr-tab-btn.active {
   background: var(--accent-primary);
   color: #ffffff;
+  box-shadow: var(--btn-shadow);
 }
 
-/* Theme Cycle Button */
+/* Theme Cycler Button */
 .gr-theme-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
@@ -1688,11 +1841,14 @@ body {
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  font-family: var(--font-sans);
+  transition: all 0.15s ease;
 }
 
 .gr-theme-btn:hover {
   background: var(--bg-card-hover);
   border-color: var(--border-active);
+  transform: translateY(-1px);
 }
 
 /* Tab Views Container */
@@ -1709,13 +1865,13 @@ body {
 /* Workbench Full-Width 2-Column Grid */
 .gr-workbench {
   display: grid;
-  grid-template-columns: 280px 1fr;
-  gap: 14px;
+  grid-template-columns: 290px 1fr;
+  gap: 16px;
   width: 100%;
   align-items: stretch;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 920px) {
   .gr-workbench {
     grid-template-columns: 1fr;
   }
@@ -1735,7 +1891,7 @@ body {
 
 .gr-sidebar-section {
   padding: 14px 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -1751,10 +1907,10 @@ body {
 }
 
 .gr-section-title {
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  color: var(--text-secondary);
-  letter-spacing: 0.6px;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
   text-transform: uppercase;
 }
 
@@ -1766,44 +1922,20 @@ body {
   font-weight: 600;
   cursor: pointer;
   padding: 0;
+  font-family: var(--font-sans);
 }
 .gr-btn-link:hover {
   text-decoration: underline;
 }
 
-/* AI Badge */
-.gr-ai-badge {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 10px 12px;
-}
-
-.gr-ai-name {
-  font-size: 13px;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.gr-ai-model {
-  font-size: 11px;
-  color: var(--accent-primary);
-  margin-top: 3px;
-  font-family: monospace;
-  word-break: break-all;
-}
-
-.gr-sidebar-btn-row {
-  display: flex;
-  gap: 8px;
-}
-.gr-sidebar-btn-row .gr-btn {
-  flex: 1;
-  justify-content: center;
-  padding: 8px 12px;
-  font-size: 12px;
+.gr-form-sublabel {
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 3px;
+  display: block;
 }
 
 /* Segmented Control */
@@ -1822,9 +1954,10 @@ body {
   border: none;
   color: var(--text-secondary);
   padding: 7px 6px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
+  border-radius: var(--radius-xs);
+  font-size: 11.5px;
   font-weight: 600;
+  font-family: var(--font-sans);
   cursor: pointer;
   text-align: center;
   transition: all 0.15s ease;
@@ -1835,25 +1968,26 @@ body {
 .gr-segment-btn.active {
   background: var(--accent-primary);
   color: #ffffff;
+  box-shadow: var(--btn-shadow);
 }
 
 /* Presets List */
 .gr-preset-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  max-height: none;
-  overflow: visible;
+  gap: 5px;
 }
 
 .gr-preset-item {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
+  border-left: 3px solid transparent;
   color: var(--text-secondary);
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 500;
+  font-family: var(--font-sans);
   text-align: left;
   cursor: pointer;
   white-space: normal;
@@ -1864,12 +1998,14 @@ body {
   border-color: var(--border-active);
   color: var(--text-primary);
   background: var(--bg-card-hover);
+  transform: translateX(2px);
 }
 .gr-preset-item.active {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-  color: #ffffff;
-  font-weight: 700;
+  background: var(--bg-card);
+  border-color: var(--border-active);
+  border-left: 3px solid var(--accent-primary);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .gr-custom-prompt-box {
@@ -1881,23 +2017,20 @@ body {
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
 }
-  padding: 8px 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-color);
-}
 
 /* Progress Track */
 .gr-progress-track {
   width: 100%;
   height: 6px;
   background: var(--bg-primary);
-  border-radius: 3px;
+  border-radius: 999px;
   overflow: hidden;
 }
 
 .gr-progress-fill {
   height: 100%;
   background: var(--accent-primary);
+  transition: width 0.3s ease;
 }
 
 .gr-metrics-row {
@@ -1907,11 +2040,24 @@ body {
   font-size: 11px;
 }
 
+/* Keyboard KBD styling */
+kbd {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
 /* Main Canvas */
 .gr-main-canvas {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   flex: 1;
   min-width: 0;
 }
@@ -1934,7 +2080,7 @@ body {
 
 .gr-diff-header {
   background: rgba(0, 0, 0, 0.15);
-  padding: 10px 16px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
@@ -1947,9 +2093,10 @@ body {
   padding: 3px 8px;
   border-radius: 4px;
   letter-spacing: 0.5px;
+  font-family: var(--font-sans);
 }
 
-.badge-pending { background: #475569; color: #cbd5e1; }
+.badge-pending { background: #475569; color: #f8fafc; }
 .badge-accepted { background: var(--accent-success-bg); color: var(--accent-success); border: 1px solid rgba(16,185,129,0.3); }
 .badge-rejected { background: var(--accent-danger-bg); color: var(--accent-danger); border: 1px solid rgba(239,68,68,0.3); }
 .badge-modified { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); }
@@ -1957,8 +2104,8 @@ body {
 .gr-diff-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  padding: 14px 16px;
+  gap: 16px;
+  padding: 16px 18px;
   flex: 1;
 }
 
@@ -1978,67 +2125,136 @@ body {
 .gr-pane-title {
   font-size: 11px;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
+  display: flex;
+  justify-content: space-between;
 }
 
 .gr-pane-content {
   background: var(--bg-primary);
-  padding: 16px;
+  padding: 18px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   font-size: 14px;
+  font-family: var(--font-sans);
   white-space: pre-wrap;
   min-height: 440px;
   height: calc(100vh - 290px);
   max-height: 750px;
   overflow-y: auto;
-  line-height: 1.7;
+  line-height: 1.75;
+  letter-spacing: 0.01em;
 }
 
-/* Diff Highlighting */
+/* Side-by-Side Dual Highlighting */
+.diff-del-highlight {
+  background: var(--accent-danger-bg);
+  color: #f87171;
+  text-decoration: line-through;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin: 0 1px;
+  font-weight: 500;
+  border-bottom: 1px dashed rgba(239, 68, 68, 0.4);
+}
+
+.diff-ins-highlight {
+  background: var(--accent-success-bg);
+  color: #34d399;
+  text-decoration: none;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin: 0 1px;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+/* Inline Diff Highlighting */
 .diff-del {
   background: var(--accent-danger-bg);
-  color: #fca5a5;
+  color: #f87171;
   text-decoration: line-through;
-  padding: 2px 4px;
+  padding: 1px 4px;
   border-radius: 3px;
   margin: 0 1px;
 }
 
 .diff-ins {
   background: var(--accent-success-bg);
-  color: #6ee7b7;
+  color: #34d399;
   text-decoration: none;
-  padding: 2px 4px;
+  padding: 1px 4px;
   border-radius: 3px;
   margin: 0 1px;
   font-weight: 600;
 }
 
-/* Buttons & Actions */
+/* Diff View Switcher Pills */
+.gr-diff-view-switcher {
+  display: inline-flex;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  padding: 2px;
+  gap: 2px;
+}
+
+.gr-view-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10.5px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gr-view-toggle-btn:hover {
+  color: var(--text-primary);
+}
+
+.gr-view-toggle-btn.active {
+  background: var(--accent-primary);
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+/* Buttons & Micro-interactions */
 .gr-actions-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
-  background: rgba(0, 0, 0, 0.1);
+  padding: 12px 18px;
+  background: rgba(0, 0, 0, 0.15);
   border-top: 1px solid var(--border-color);
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .gr-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
+  font-family: var(--font-sans);
   cursor: pointer;
   border: 1px solid transparent;
+  box-shadow: var(--btn-shadow);
+  transition: all 0.15s ease;
+}
+.gr-btn:hover {
+  transform: translateY(-1px);
+}
+.gr-btn:active {
+  transform: translateY(0);
 }
 
 .btn-primary { background: var(--accent-primary); color: #fff; }
@@ -2047,7 +2263,7 @@ body {
 .btn-success { background: var(--accent-success); color: #fff; }
 .btn-success:hover { background: #059669; }
 
-.btn-danger { background: var(--bg-card); color: var(--accent-danger); border-color: rgba(239,68,68,0.4); }
+.btn-danger { background: var(--bg-card); color: var(--accent-danger); border-color: rgba(239,68,68,0.3); }
 .btn-danger:hover { background: var(--accent-danger-bg); }
 
 .btn-secondary { background: var(--bg-card); color: var(--text-primary); border-color: var(--border-color); }
@@ -2056,14 +2272,30 @@ body {
 .btn-save {
   background: var(--accent-success);
   color: #fff;
-  font-size: 13px;
-  padding: 10px 20px;
+  font-size: 13.5px;
+  padding: 11px 24px;
   border-radius: var(--radius-sm);
   font-weight: 700;
 }
-
 .btn-save:hover {
   background: #059669;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+.gr-select, .gr-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.gr-select:focus, .gr-input:focus {
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
 }
 
 /* History Table */
@@ -2077,7 +2309,7 @@ body {
 }
 
 .gr-history-table th, .gr-history-table td {
-  padding: 10px 14px;
+  padding: 11px 14px;
   text-align: left;
   border-bottom: 1px solid var(--border-color);
   font-size: 12px;
@@ -2109,7 +2341,7 @@ body {
 .gr-settings-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 12px;
 }
 @media (max-width: 768px) {
   .gr-settings-grid {
@@ -2120,15 +2352,17 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 14px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+  transition: all 0.15s ease;
 }
 .gr-provider-card:hover {
   border-color: var(--border-active);
   background: var(--bg-card-hover);
+  transform: translateY(-1px);
 }
 .gr-provider-card.active {
   border-color: var(--accent-primary);
@@ -2142,7 +2376,7 @@ body {
 }
 .gr-provider-title {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--text-primary);
 }
 .gr-badge-free {
@@ -2165,16 +2399,16 @@ body {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 16px;
+  padding: 18px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   box-shadow: var(--card-shadow);
 }
 .gr-form-group {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 .gr-form-label {
   font-size: 12px;
@@ -2184,25 +2418,6 @@ body {
 .gr-form-help {
   font-size: 11px;
   color: var(--text-secondary);
-}
-.gr-select, .gr-input {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
-  font-size: 12px;
-  outline: none;
-}
-.gr-select:focus, .gr-input:focus {
-  border-color: var(--border-active);
-}
-.gr-label {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
 }
 `;
 
@@ -2238,7 +2453,7 @@ function renderSidebarPanel(session, config, metrics) {
   return `
   <aside class="gr-sidebar">
     
-    <!-- Section 1: AI Engine & Model Selector (Only Saved Providers) -->
+    <!-- Section 1: AI Engine & Model Selector -->
     <div class="gr-sidebar-section">
       <div class="gr-sidebar-header">
         <span class="gr-section-title">AI ENGINE</span>
@@ -2247,25 +2462,25 @@ function renderSidebarPanel(session, config, metrics) {
 
       <div style="display: flex; flex-direction: column; gap: 6px;">
         <div>
-          <label style="font-size: 10px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 2px; display: block;">Saved Provider</label>
-          <select id="quick-provider-select" class="gr-select" style="width: 100%; font-size: 11px; padding: 6px 8px;" onchange="sendAction('setProvider', this.value)">
+          <span class="gr-form-sublabel">Saved Provider</span>
+          <select id="quick-provider-select" class="gr-select" style="width: 100%;" onchange="sendAction('setProvider', this.value)">
             ${providerOptionsHtml}
           </select>
         </div>
 
         <div>
-          <label style="font-size: 10px; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; margin-bottom: 2px; display: block;">Model</label>
-          <select id="quick-model-select" class="gr-select" style="width: 100%; font-size: 11px; padding: 6px 8px;" onchange="sendAction('setModel', this.value)">
+          <span class="gr-form-sublabel">Active Model</span>
+          <select id="quick-model-select" class="gr-select" style="width: 100%;" onchange="sendAction('setModel', this.value)">
             ${modelOptionsHtml}
           </select>
         </div>
       </div>
 
-      <div class="gr-sidebar-btn-row" style="margin-top: 4px;">
-        <button class="gr-btn btn-primary" onclick="sendAction('runReview')">
+      <div class="gr-sidebar-btn-row" style="display: flex; gap: 8px; margin-top: 4px;">
+        <button class="gr-btn btn-primary" style="flex: 1; justify-content: center;" onclick="sendAction('runReview')">
           \u26A1 Review Item
         </button>
-        <button class="gr-btn btn-secondary" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
+        <button class="gr-btn btn-secondary" style="padding: 8px 12px;" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
           \u26A1 All
         </button>
       </div>
@@ -2294,7 +2509,7 @@ function renderSidebarPanel(session, config, metrics) {
       </div>
       ${session?.customPrompt ? `
         <div class="gr-custom-prompt-box">
-          <div style="font-weight: 700;">Custom Prompt:</div>
+          <div style="font-weight: 700; color: var(--text-primary);">Custom Prompt:</div>
           <div style="font-style: italic; margin: 3px 0 5px 0; line-height: 1.35;">"${escapeHtml(session.customPrompt)}"</div>
           <button class="gr-btn-link" style="color: var(--accent-danger);" onclick="sendAction('clearCustomPrompt')">\u2715 Clear custom</button>
         </div>
@@ -2305,7 +2520,7 @@ function renderSidebarPanel(session, config, metrics) {
     <div class="gr-sidebar-section">
       <div class="gr-sidebar-header" style="margin-bottom: 6px;">
         <span class="gr-section-title">PROGRESS</span>
-        <span style="font-size: 12px; font-weight: 700; color: var(--text-primary);">
+        <span style="font-size: 12px; font-weight: 700; color: var(--text-primary); font-family: var(--font-mono);">
           ${metrics.reviewed} / ${metrics.total} (${metrics.percentComplete}%)
         </span>
       </div>
@@ -2313,18 +2528,18 @@ function renderSidebarPanel(session, config, metrics) {
         <div class="gr-progress-fill" style="width: ${metrics.percentComplete}%;"></div>
       </div>
       <div class="gr-metrics-row">
-        <span style="color: var(--accent-success); font-weight: 600;">\u2713 Accepted: ${metrics.accepted}</span>
-        <span style="color: var(--accent-danger); font-weight: 600;">\u2717 Rejected: ${metrics.rejected}</span>
+        <span style="color: var(--accent-success); font-weight: 600;">\u2713 ${metrics.accepted} Accepted</span>
+        <span style="color: var(--accent-danger); font-weight: 600;">\u2717 ${metrics.rejected} Rejected</span>
       </div>
     </div>
 
     <!-- Section 5: Keyboard Shortcuts Footer -->
-    <div class="gr-sidebar-section" style="background: rgba(0,0,0,0.15); padding: 8px 12px;">
-      <div style="font-size: 11px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: center;">
-        <span><code>A</code> Accept</span>
-        <span><code>R</code> Reject</span>
-        <span><code>N</code>/<code>P</code> Nav</span>
-        <span><code>T</code> Theme</span>
+    <div class="gr-sidebar-section" style="background: rgba(0, 0, 0, 0.18); padding: 10px 14px;">
+      <div style="font-size: 11px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: center; align-items: center;">
+        <span><kbd>A</kbd> Accept</span>
+        <span><kbd>R</kbd> Reject</span>
+        <span><kbd>N</kbd>/<kbd>P</kbd> Nav</span>
+        <span><kbd>T</kbd> Theme</span>
       </div>
     </div>
 
@@ -2339,47 +2554,87 @@ function renderDiffCard(item, index, total) {
   }
   const badgeClass = `badge-${item.status || "pending"}`;
   const statusLabel = (item.status || "pending").toUpperCase();
-  const diffHtml = item.diff?.inlineHtml || escapeHtml(item.suggestion || item.original);
+  const leftPaneHtml = item.diff?.originalHtml || escapeHtml(item.original);
+  const suggestedCleanHtml = item.diff?.suggestedHtml || escapeHtml(item.suggestion || item.original);
+  const inlineDiffHtml = item.diff?.inlineHtml || suggestedCleanHtml;
+  const rawPlainHtml = escapeHtml(item.suggestion || item.original);
+  const origWords = (item.original || "").trim().split(/\s+/).filter(Boolean).length;
+  const suggWords = (item.suggestion || item.original || "").trim().split(/\s+/).filter(Boolean).length;
   return `
   <div class="gr-diff-card active" data-index="${index}">
     <div class="gr-diff-header">
-      <div>
-        <strong style="color: var(--text-primary);">Item #${index + 1} of ${total}</strong>
-        <span style="color: var(--text-secondary); margin-left: 8px; font-size: 12px;">(${item.type})</span>
-        <span style="color: var(--text-muted); font-size: 11px; margin-left: 6px;" title="Scrolling one side automatically scrolls the other">\u{1F517} Sync Scroll</span>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <strong style="color: var(--text-primary); font-size: 13.5px;">Item #${index + 1} of ${total}</strong>
+        <span style="color: var(--text-secondary); font-size: 12px; text-transform: capitalize;">(${item.type})</span>
+        <span style="color: var(--text-muted); font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" title="Bidirectional scroll synchronization active">
+          \u{1F517} Sync Scroll
+        </span>
       </div>
       <span class="gr-diff-badge ${badgeClass}">${statusLabel}</span>
     </div>
 
     <div class="gr-diff-body">
+      <!-- Left Pane: Original Draft -->
       <div class="gr-pane">
-        <div class="gr-pane-title">Original Text</div>
-        <div class="gr-pane-content" id="original-pane-${index}">${escapeHtml(item.original)}</div>
+        <div class="gr-pane-title">
+          <span>\u{1F4C4} Original Draft</span>
+          <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${origWords} words</span>
+        </div>
+        <div class="gr-pane-content" id="original-pane-${index}">${leftPaneHtml}</div>
       </div>
 
+      <!-- Right Pane: AI Suggestion with View Switcher -->
       <div class="gr-pane">
-        <div class="gr-pane-title">AI Suggestion (Diff View)</div>
-        <div class="gr-pane-content" id="suggestion-pane-${index}">
-          ${diffHtml}
+        <div class="gr-pane-title">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span>\u2728 AI Suggestion</span>
+            <div class="gr-diff-view-switcher">
+              <button class="gr-view-toggle-btn active" id="btn-view-clean-${index}" onclick="setDiffViewMode(${index}, 'clean')">Clean Prose</button>
+              <button class="gr-view-toggle-btn" id="btn-view-inline-${index}" onclick="setDiffViewMode(${index}, 'inline')">Inline Diff</button>
+            </div>
+          </div>
+          <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${suggWords} words</span>
         </div>
+        
+        <!-- Pre-encoded diff content payloads for 0ms client-side mode switching -->
+        <div class="gr-pane-content" id="suggestion-pane-${index}" 
+             data-clean="${escapeDataAttr(suggestedCleanHtml)}"
+             data-inline="${escapeDataAttr(inlineDiffHtml)}"
+             data-plain="${escapeDataAttr(rawPlainHtml)}">${suggestedCleanHtml}</div>
       </div>
     </div>
 
     <div class="gr-actions-footer">
-      <div style="display: flex; gap: 8px;">
-        <button class="gr-btn btn-success" onclick="sendAction('acceptItem', ${index})">\u2713 Accept</button>
-        <button class="gr-btn btn-danger" onclick="sendAction('rejectItem', ${index})">\u2717 Reject</button>
-        <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">\u270F\uFE0F Edit</button>
-        <button class="gr-btn btn-secondary" onclick="sendAction('reReviewItem', ${index})">\u{1F504} Re-Review</button>
+      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button class="gr-btn btn-success" onclick="sendAction('acceptItem', ${index})">
+          \u2713 Accept <kbd style="margin-left: 4px; background: rgba(0,0,0,0.2); border: none; color: #fff;">A</kbd>
+        </button>
+        <button class="gr-btn btn-danger" onclick="sendAction('rejectItem', ${index})">
+          \u2717 Reject <kbd style="margin-left: 4px; background: rgba(0,0,0,0.2); border: none; color: inherit;">R</kbd>
+        </button>
+        <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+          \u270F\uFE0F Edit
+        </button>
+        <button class="gr-btn btn-secondary" onclick="sendAction('reReviewItem', ${index})">
+          \u{1F504} Re-Review
+        </button>
       </div>
 
-      <div style="display: flex; gap: 8px;">
-        <button class="gr-btn btn-secondary" onclick="sendAction('prevItem')" ${index === 0 ? "disabled" : ""}>\u2190 Previous</button>
-        <button class="gr-btn btn-secondary" onclick="sendAction('nextItem')" ${index >= total - 1 ? "disabled" : ""}>Next \u2192</button>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button class="gr-btn btn-secondary" onclick="sendAction('prevItem')" ${index === 0 ? "disabled style='opacity: 0.5; cursor: not-allowed;'" : ""}>
+          \u2190 Previous
+        </button>
+        <button class="gr-btn btn-secondary" onclick="sendAction('nextItem')" ${index >= total - 1 ? "disabled style='opacity: 0.5; cursor: not-allowed;'" : ""}>
+          Next \u2192
+        </button>
       </div>
     </div>
   </div>
   `;
+}
+function escapeDataAttr(htmlStr) {
+  if (!htmlStr) return "";
+  return encodeURIComponent(htmlStr);
 }
 
 // anp-23-grammar-reviewer/lib/ui/dashboardTemplate.js
@@ -2510,6 +2765,39 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       }
     } catch (e) {}
 
+    // Audit Report Notes Setting (Off by default)
+    const AUDIT_STORAGE_KEY = "ANP_GRAMMAR_CREATE_AUDIT_NOTES";
+
+    function isAuditNotesEnabled() {
+      try {
+        return localStorage.getItem(AUDIT_STORAGE_KEY) === "true";
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function toggleAuditNotesSetting(checked) {
+      try {
+        localStorage.setItem(AUDIT_STORAGE_KEY, checked ? "true" : "false");
+      } catch (e) {}
+      syncAuditCheckboxes(checked);
+    }
+
+    function syncAuditCheckboxes(val) {
+      const enabled = val !== undefined ? val : isAuditNotesEnabled();
+      const historyToggle = document.getElementById("history-audit-toggle");
+      const settingsToggle = document.getElementById("settings-audit-toggle");
+      if (historyToggle) historyToggle.checked = enabled;
+      if (settingsToggle) settingsToggle.checked = enabled;
+    }
+
+    function handleSaveButtonClick() {
+      sendAction("saveAndCommit", isAuditNotesEnabled());
+    }
+
+    // Initialize audit checkbox state
+    syncAuditCheckboxes();
+
     // Keyboard Shortcuts
     window.addEventListener("keydown", (e) => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
@@ -2581,6 +2869,26 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       if (edited !== null) {
         sendAction("manualEditItem", index, edited);
       }
+    }
+
+    function setDiffViewMode(index, mode) {
+      const pane = document.getElementById("suggestion-pane-" + index);
+      if (!pane) return;
+
+      const cleanHtml = decodeURIComponent(pane.getAttribute("data-clean") || "");
+      const inlineHtml = decodeURIComponent(pane.getAttribute("data-inline") || "");
+
+      if (mode === "inline") {
+        pane.innerHTML = inlineHtml;
+      } else {
+        pane.innerHTML = cleanHtml;
+      }
+
+      const btnClean = document.getElementById("btn-view-clean-" + index);
+      const btnInline = document.getElementById("btn-view-inline-" + index);
+
+      if (btnClean) btnClean.classList.toggle("active", mode === "clean");
+      if (btnInline) btnInline.classList.toggle("active", mode === "inline");
     }
 
     // Synchronized Scrolling for Dual-Pane Diff View (Full Note & Paragraphs)
@@ -2824,7 +3132,7 @@ function renderReviewWorkspace(session, config, metrics, currentItem) {
           <div style="font-size: 12px; color: var(--text-secondary);">
             \u{1F4A1} <strong>Shortcuts:</strong> <code>A</code> Accept \xB7 <code>R</code> Reject \xB7 <code>N/P</code> Next/Prev \xB7 <code>T</code> Theme
           </div>
-          <button class="gr-btn btn-save" style="padding: 10px 24px; font-size: 13px;" onclick="sendAction('saveAndCommit')">
+          <button class="gr-btn btn-save" style="padding: 10px 24px; font-size: 13px;" onclick="handleSaveButtonClick()">
             \u{1F4BE} Save & Commit Rewrites to Note
           </button>
         </div>
@@ -2833,22 +3141,53 @@ function renderReviewWorkspace(session, config, metrics, currentItem) {
   `;
 }
 function renderHistoryWorkspace(historyRecords) {
+  const legendHtml = `
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 18px; margin-bottom: 14px; display: flex; gap: 12px; align-items: flex-start;">
+      <div style="font-size: 24px; line-height: 1;">\u{1F4A1}</div>
+      <div style="flex: 1;">
+        <div style="font-size: 13px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px;">Amplenote Native Version History & Note Archiving</div>
+        <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.5; margin-bottom: 8px;">
+          Amplenote automatically records save points for every note every 10 minutes. You can view or restore previous versions anytime by opening any note, clicking the <strong><code>...</code> (Note Options)</strong> menu in the top right corner, and selecting <strong><code>View revision history</code></strong>.
+        </p>
+        <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-primary); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color); flex-wrap: wrap; gap: 8px;">
+          <label style="font-size: 12px; font-weight: 600; color: var(--text-primary); display: flex; align-items: center; gap: 8px; cursor: pointer;">
+            <input type="checkbox" id="history-audit-toggle" onchange="toggleAuditNotesSetting(this.checked)">
+            <span>Generate extra audit report notes (<code>-reports/-grammar/*</code>) on save</span>
+          </label>
+          <span style="font-size: 11px; color: var(--accent-success); font-weight: 700;">(Turned OFF by default)</span>
+        </div>
+      </div>
+    </div>
+  `;
   if (!historyRecords || historyRecords.length === 0) {
     return `
+      ${legendHtml}
       <div class="gr-empty-state">
         <div style="font-size: 48px; margin-bottom: 12px;">\u{1F4DC}</div>
-        <h2 style="color: var(--text-primary); font-size: 18px;">No Past Review History Found</h2>
-        <p style="margin-top: 6px; font-size: 13px; color: var(--text-secondary);">When you commit reviews, iteration history is automatically archived with tag <code>-reports/-grammar/-history</code>.</p>
+        <h2 style="color: var(--text-primary); font-size: 16px; font-weight: 700;">No Past Review History Found</h2>
+        <p style="margin-top: 6px; font-size: 13px; color: var(--text-secondary); max-width: 480px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+          When audit logging is enabled, iteration snapshots and logs are archived with tag <code>-reports/-grammar/-history</code>.
+        </p>
+        <div style="margin-top: 18px; display: flex; gap: 10px; justify-content: center;">
+          <button class="gr-btn btn-secondary" onclick="sendAction('refreshHistory')">
+            \u{1F504} Refresh History
+          </button>
+          <button class="gr-btn btn-primary" onclick="switchTab('review')">
+            \u26A1 Back to Reviewer
+          </button>
+        </div>
       </div>
     `;
   }
   const rows = historyRecords.map((rec) => {
-    const dateStr = rec.isoDate ? rec.isoDate.replace("T", " ").substring(0, 16) : String(rec.timestamp);
+    const cleanDate = (rec.isoDate || "").replace(/[*_#]/g, "").trim();
+    const dateStr = cleanDate ? cleanDate.replace("T", " ").substring(0, 16) : String(rec.timestamp);
+    const cleanTitle = (rec.sourceNote?.title || "Untitled Note").replace(/[*_#]/g, "").trim();
     const changesCount = rec.session?.metrics?.accepted || 0;
     return `
       <tr>
         <td><strong>${dateStr}</strong></td>
-        <td>${escapeHtml(rec.sourceNote?.title || "Untitled Note")}</td>
+        <td>${escapeHtml(cleanTitle)}</td>
         <td><span class="gr-diff-badge badge-accepted">${rec.session?.provider || "AI"} (${rec.session?.granularity || "mode"})</span></td>
         <td>${changesCount} changes applied</td>
         <td>
@@ -2858,8 +3197,14 @@ function renderHistoryWorkspace(historyRecords) {
     `;
   }).join("");
   return `
+    ${legendHtml}
     <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: 16px; border: 1px solid var(--border-color); box-shadow: var(--card-shadow); overflow-x: auto;">
-      <h2 style="font-size: 15px; margin-bottom: 14px; color: var(--text-primary);">Past Grammar Review Iterations</h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h2 style="font-size: 15px; color: var(--text-primary); margin: 0;">Past Grammar Review Iterations</h2>
+        <button class="gr-btn btn-secondary" style="padding: 4px 10px; font-size: 11.5px;" onclick="sendAction('refreshHistory')">
+          \u{1F504} Refresh History
+        </button>
+      </div>
       <table class="gr-history-table">
         <thead>
           <tr>
@@ -2892,45 +3237,43 @@ function renderSettingsWorkspace(config) {
     { key: PROVIDERS.OPENAI, title: "OpenAI", badge: "GPT-5.6 Luna & Terra", isFree: false, desc: "Current generation GPT-5.6 Luna, Terra, Sol & GPT-5.4." },
     { key: PROVIDERS.ANTHROPIC, title: "Anthropic Claude", badge: "Claude Haiku 4.5 & Sonnet 5", isFree: false, desc: "Crisp copyediting via Claude Haiku 4.5, Sonnet 5 & Opus 4.8." }
   ];
-  const providerCards = providersInfo.map((p) => {
+  const cardsHtml = providersInfo.map((p) => {
     const isSelected = p.key === activeProvider;
+    const badgeClass = p.isFree ? "gr-badge-free" : "gr-badge-paid";
     return `
-      <div class="gr-provider-card ${isSelected ? "active" : ""}" data-key="${p.key}" onclick="selectProviderCard('${p.key}')">
+      <div class="gr-provider-card ${isSelected ? "active" : ""}" data-key="${escapeHtml(p.key)}" onclick="selectProviderCard('${escapeHtml(p.key)}')">
         <div class="gr-provider-card-header">
-          <span class="gr-provider-title">${p.title}</span>
-          <span class="${p.isFree ? "gr-badge-free" : "gr-badge-paid"}">${p.badge}</span>
+          <span class="gr-provider-title">${escapeHtml(p.title)}</span>
+          <span class="${badgeClass}">${escapeHtml(p.badge)}</span>
         </div>
-        <p style="font-size: 12px; color: var(--text-secondary);">${p.desc}</p>
+        <p style="font-size: 11.5px; color: var(--text-secondary); line-height: 1.35;">${escapeHtml(p.desc)}</p>
       </div>
     `;
   }).join("");
-  const activeSavedModel = config.allModels && config.allModels[activeProvider] || config.customModel || "";
-  const isMatchedModel = catalog.some((m) => m.value === activeSavedModel);
-  const isCustomModelActive = Boolean(activeSavedModel && !isMatchedModel);
+  const activeSavedModel = config.allModels?.[activeProvider] || "";
+  const isCustomModelActive = catalog.length > 0 && !catalog.some((m) => m.value === activeSavedModel) && Boolean(activeSavedModel);
   const modelOptionsHtml = catalog.map((m) => {
-    return `<option value="${m.value}" ${m.value === activeSavedModel ? "selected" : ""}>${m.label} (${m.value})</option>`;
+    const isSelected = m.value === activeSavedModel;
+    return `<option value="${escapeHtml(m.value)}" ${isSelected ? "selected" : ""}>${escapeHtml(m.label)}</option>`;
   }).join("") + `<option value="__custom__" ${isCustomModelActive ? "selected" : ""}>\u2699\uFE0F Custom Model Override...</option>`;
   return `
-    <div style="display: flex; flex-direction: column; gap: 16px;">
+    <div style="display: flex; flex-direction: column; gap: 16px; width: 100%;">
       
+      <!-- Providers Grid -->
       <div>
-        <h2 style="font-size: 16px; color: var(--text-primary); margin-bottom: 4px;">Select AI Provider</h2>
-        <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px;">Choose from free-tier providers or configure your direct API keys.</p>
+        <h2 style="font-size: 15px; margin-bottom: 10px; color: var(--text-primary);">Select AI Provider</h2>
         <div class="gr-settings-grid">
-          ${providerCards}
+          ${cardsHtml}
         </div>
       </div>
 
+      <!-- Config Form -->
       <div class="gr-settings-form">
-        <h3 style="font-size: 14px; color: var(--text-primary); border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
-          Configure: <strong id="settings-provider-title">${activeProvider}</strong>
-        </h3>
+        <input type="hidden" id="settings-provider" value="${escapeHtml(activeProvider)}">
 
-        <input type="hidden" id="settings-provider" value="${activeProvider}">
-
-        <div id="settings-api-key-group" class="gr-form-group" style="display: ${activeProvider.includes("Ollama") ? "none" : "flex"};">
+        <div class="gr-form-group" id="settings-api-key-group" style="display: ${activeProvider.includes("Ollama") ? "none" : "flex"};">
           <div style="display: flex; justify-content: space-between; align-items: center;">
-            <label class="gr-form-label" id="settings-api-key-label" for="settings-api-key">${activeProvider} API Key</label>
+            <label class="gr-form-label" id="settings-api-key-label" for="settings-api-key">${escapeHtml(activeProvider)} API Key</label>
             <a id="settings-doc-link" href="${docUrl}" target="_blank" style="font-size: 12px; color: var(--accent-primary); text-decoration: none; font-weight: 600;">Get API Key \u2197</a>
           </div>
 
@@ -2972,6 +3315,23 @@ function renderSettingsWorkspace(config) {
           <label class="gr-form-label" for="settings-model">Enter Custom Model ID</label>
           <input type="text" id="settings-model" class="gr-input" style="width: 100%; padding: 8px 12px;" placeholder="e.g. llama3.2:1b, mistral-nemo, gpt-4-turbo" value="${escapeHtml(activeSavedModel)}">
           <span class="gr-form-help">Type the exact model tag or endpoint ID you wish to use.</span>
+        </div>
+
+        <!-- Audit Reports Setting (Off by default) -->
+        <div class="gr-form-group" style="margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+          <label class="gr-form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>Audit & Change Reports Creation</span>
+            <span style="font-size: 10.5px; color: var(--accent-success); font-weight: 700;">OFF BY DEFAULT</span>
+          </label>
+          <div style="background: var(--bg-card); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+            <label style="font-size: 12px; color: var(--text-primary); font-weight: 600; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+              <input type="checkbox" id="settings-audit-toggle" onchange="toggleAuditNotesSetting(this.checked)">
+              <span>Generate extra change reports and history notes (<code>-reports/-grammar/*</code>) on save</span>
+            </label>
+            <div style="font-size: 11px; color: var(--text-secondary); margin-top: 4px; line-height: 1.45;">
+              Amplenote natively preserves version history automatically via <strong>Note Options > View revision history</strong>. Keep this unchecked to prevent extra notes from cluttering your notes list.
+            </div>
+          </div>
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
@@ -3027,6 +3387,10 @@ var plugin = {
         }
         case "clearSession":
           clearActiveSession();
+          break;
+        case "refreshHistory":
+          activeTabState = "history";
+          requiresReRender = true;
           break;
         case "setTab":
           activeTabState = args[1] || "review";
@@ -3184,21 +3548,26 @@ var plugin = {
           break;
         case "saveAndCommit":
           if (session) {
+            const auditEnabled = Boolean(args[1]);
             const confirmSave = await app.prompt("Commit Grammar Review Rewrites?", {
               inputs: [
                 {
-                  label: "Apply changes to source note and generate audit logs?",
+                  label: "Also create extra changes & history report notes (-reports/-grammar/*)? (Optional \u2014 Amplenote natively captures note revision history)",
                   type: "checkbox",
-                  value: true
+                  value: auditEnabled
                 }
               ]
             });
-            if (confirmSave) {
-              const res = await handleSaveAndCommit(app);
-              await app.alert(`Changes saved successfully!
+            if (confirmSave !== null && confirmSave !== false) {
+              const shouldCreateNotes = typeof confirmSave === "object" ? Boolean(confirmSave["Also create extra changes & history report notes (-reports/-grammar/*)? (Optional \u2014 Amplenote natively captures note revision history)"] ?? confirmSave[0]) : Boolean(confirmSave);
+              const res = await handleSaveAndCommit(app, shouldCreateNotes);
+              if (shouldCreateNotes && res.changesNoteUUID) {
+                await app.alert(`Changes saved to source note!
 
-Changes report created: ${res.changesNoteUUID}
-History log archived.`);
+Audit report created: ${res.changesNoteUUID}`);
+              } else {
+                await app.alert("Changes successfully saved to source note!");
+              }
             }
           }
           break;
