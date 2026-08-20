@@ -1506,7 +1506,7 @@ async function loadHistoryRecords(app) {
             }
           }
         }
-      } catch (e) {
+      } catch {
       }
     }
     if (noteMap.size === 0) {
@@ -1526,7 +1526,7 @@ async function loadHistoryRecords(app) {
               }
             }
           }
-        } catch (e) {
+        } catch {
         }
       }
     }
@@ -1543,7 +1543,7 @@ async function loadHistoryRecords(app) {
           name: n.name,
           body
         });
-      } catch (err) {
+      } catch {
         populatedNotes.push({
           uuid: n.uuid,
           name: n.name,
