@@ -34,7 +34,7 @@ Note editing requires generous visual real estate and rapid navigation:
 - **Review Navigator**: Direct jumping to any item with live status badges (`✓`, `✕`, `✎`, `●`, `○`), plus skip-to-pending buttons (`⏮ Prev Pending` / `Next Pending ⏭`).
 - **Top Operation Indicator**: Live animated progress bar and cancellation banner keep long reviews transparent.
 - **100% Full-Width Workbench**: All controls reside in a compact Left Control Sidebar, allowing diffs to occupy the full viewport width.
-- **Zero-Flicker Reactivity**: Tabs, themes, and diff modes switch entirely within the client DOM with **0ms latency**.
+- **Zero-Flicker Reactivity**: Tabs, themes, diff modes, provider dropdowns, active model selectors, and prompt presets update entirely within the client DOM with **0ms latency**, never forcing full iframe re-renders or white flashes.
 
 ## 7. Clean Notebook First (Leverage Native Platform Powers)
 Avoid polluting the user's workspace with unnecessary files:
@@ -46,4 +46,14 @@ Users should never be locked into a single proprietary API:
 - **Free-Tier Friendly**: Out-of-the-box support for OpenRouter's free pool, Gemini Flash, Groq's fast tier, and local offline Ollama models.
 - **Frontier Quality**: Direct API key integration for Claude Sonnet 5, DeepSeek V4 Pro, and GPT-5.6.
 - **Per-Provider Model Memory (Zero Schema Pollution)**: Custom models and selections are stored independently for each provider via clean JSON formatting within existing settings.
+
+## 9. Sandboxed-Safe UI Sovereignty
+Amplenote embeds run in sandboxed iframes without `allow-modals`:
+- **Zero Dead-Click Guarantee**: Standard web APIs like `window.prompt()` and `window.confirm()` fail silently in sandboxed environments. The plugin maintains sovereign in-DOM modal dialogs (`showAppPrompt`, `showAppConfirm`, `showAppChoice`) that work seamlessly across desktop, web, and mobile clients without platform friction.
+
+## 10. Thematic Inclusivity & Ergonomic Controls
+Writing and copyediting happen across diverse lighting conditions:
+- **Balanced Light & Dark Themes**: Rather than dark-mode-only bias, 12 distinct palettes cater to daylight writing (Clean Daylight, Sepia Parchment, Sakura Blossom, Matcha Latte, Nord Frost) and nocturnal focus (Midnight Slate, Nord Arctic, Glassmorphism, Emerald Forest, Cyber Violet, Espresso Obsidian, Dracula Neo).
+- **Categorized Style Guidance**: Grouping editing styles by intent (Correction & Polish, Conciseness & Style, Tone & Voice) lets writers quickly choose their desired editorial voice.
+
 

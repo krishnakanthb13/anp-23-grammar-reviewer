@@ -51,9 +51,10 @@ graph TD
 ## 2. Core Modules
 
 ### `lib/engine/`
-- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected/modified states, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence.
+- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected/modified states, assigned note tags, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence.
   - **Undo Stack**: Maintains a bounded snapshot stack (`pushUndo`, `undo`, `canUndo`) on each item for reversible decisions.
   - **Paragraph-Preserving Sentence Reconstruction**: `getReconstructedContent()` preserves multi-line markdown structures and joins intra-paragraph sentences with spaces rather than extra newlines.
+  - **Note Tags Tracking**: Persists `noteTags` string array retrieved from the note.
   - **Pending Navigation Helpers**: `getNextPendingIndex()` and `getPrevPendingIndex()` to skip reviewed chunks.
 - **`tokenizer.js`**: Breaks Markdown text into inspectable units (`full`, `paragraph`, `sentence`) while preserving empty lines, markdown code fences, headers, and bullet structures.
   - **Parent Paragraph Tracking**: Annotates sentences with `parentParagraphId` and `isLastInParagraph` for reconstructive integrity.
@@ -64,7 +65,7 @@ graph TD
 - **`promptPresets.js`**: Pre-configured system and user prompts for tone, conciseness, flow, humor, minimal changes, and teacher/coach modes.
 
 ### `lib/features/`
-- **`launcher.js`**: Direct 1-click fullscreen launcher that automatically resolves and remembers the `Last Opened Note UUID` across sessions.
+- **`launcher.js`**: Direct 1-click fullscreen launcher that automatically resolves note title, assigned tags (`app.getNoteTags`), and remembers the `Last Opened Note UUID` across sessions.
 - **`reviewWorkflow.js`**: AI completion runner with cancellation support (`cancelReviewAll`), transient item reviewing states, and re-review prompt overrides.
 - **`saveHandler.js`**: Overwrites source note directly with note UUID validation and error handling; includes a concurrency guard that checks `app.getNoteContent()` to prevent overwriting stale externally modified notes. Optionally generates companion audit notes.
 - **`historyViewer.js`**: Multi-query history fetcher querying and deduplicating past review sessions.
@@ -74,14 +75,15 @@ graph TD
 - **`providerRegistry.js`**: Factory instantiating adapters for **OpenRouter, Gemini, Groq, Mistral, DeepSeek, Ollama, OpenAI, and Anthropic**. Extracts per-provider keys and model maps (JSON dictionary) via safe, resilient parsing without requiring extra setting rows.
 
 ### `lib/ui/`
-- **`dashboardTemplate.js`**: Renders the complete HTML shell with embedded client-side routing (`Reviewer`, `History Logs`, `Settings`), top operation loader bar (`.gr-top-loader`), live operation banner, Re-Review reason dialog, keyboard shortcuts (`A`, `R`, `U`, `N`/`P`, `T`), dynamic theme switcher, and synchronized dual-pane scroll locks.
+- **`dashboardTemplate.js`**: Renders the complete HTML shell with embedded client-side routing (`Reviewer`, `History Logs`, `Settings`), top operation loader bar (`.gr-top-loader`), live operation banner, note tag pills, keyboard shortcuts (`A`, `R`, `U`, `N`/`P`, `T`), 12-theme dynamic cycler, and synchronized dual-pane scroll locks.
+  - **In-DOM Modal Dialog Architecture**: Replaces browser-native `prompt()` and `confirm()` with sandboxed-safe in-DOM dialog components (`showAppPrompt`, `showAppConfirm`, `showAppChoice`, `closeAppModal`) to eliminate iframe dead clicks.
 - **`diffViewComponent.js`**:
   - **Review Navigator**: Jump-to item dropdown with status badges (`✓`, `✕`, `✎`, `●`, `○`) and pending navigation buttons.
   - **4 Diff View Modes**: Segmented toggle buttons (`✨ Clean Prose`, `🔀 Inline Diff`, `👥 Side-by-Side`, `📋 Changes Only`).
   - **Teacher's Insight Box**: Explanations, category tags (Grammar, Clarity, Word Choice), and confidence indicators.
   - **State-Aware Action Buttons**: Contextual button groups per state (`pending`, `suggestion_ready`, `accepted`, `rejected`, `modified`) with reversible `↩ Undo`.
-- **`promptSelectorComponent.js`**: Left sidebar control panel rendering active AI engine & model dropdown (filtered to saved providers), granularity segmented pills, prompt presets list, pending count badge (`⚡ All Pending (N)`), and live progress metrics.
-- **`styles.css.js`**: High-performance CSS engine providing a 100% full-width 2-column workbench layout (`.gr-workbench`), 6 complete themes (`midnight`, `nord`, `glass`, `emerald`, `purple`, `light`), fluid scrollbars, and diff highlights.
+- **`promptSelectorComponent.js`**: Left sidebar control panel rendering active AI engine & model dropdown (filtered to saved providers), granularity segmented pills, categorized prompt style dropdown with `<optgroup>`s and description badge, pending count badge (`⚡ All Pending (N)`), and live progress metrics.
+- **`styles.css.js`**: High-performance CSS engine providing a 100% full-width 2-column workbench layout (`.gr-workbench`), 12 complete themes (5 light, 7 dark), in-DOM modal overlay animations, fluid scrollbars, and diff highlights.
 
 ---
 
@@ -96,10 +98,14 @@ graph TD
    - `accepted` / `rejected` / `modified` ➔ prior state (via `undoItem` / `U`)
 3. **4 Diff View Modes (0ms Switching)**:
    - `setDiffViewMode(index, mode)` switches between Clean Prose, Inline Diff, Side-by-Side, and Changes Only entirely in client JS using pre-encoded DOM data attributes.
-4. **Stale Note Concurrency Protection**:
-   - Prior to committing, `saveHandler.js` verifies if the target note's current content matches the session baseline. If external changes are detected, a confirmation prompt prevents unintentional overwrites.
-5. **Per-Provider Model Persistence**:
+4. **Sandboxed-Safe In-DOM Modal Subsystem**:
+   - Amplenote sandboxed iframe embeds block native `window.prompt()` and `window.confirm()`. All user prompts (Custom Prompts, Manual Edits, Re-Review Reasons, Reset Confirmations, Key Deletions) execute via a responsive in-DOM modal dialog overlay (`.gr-modal-backdrop`).
+5. **Stale Note Concurrency Protection**:
+   - Prior to committing, `saveHandler.js` verifies if the target note's current content matches the session baseline. If external changes are detected, an in-DOM confirmation prompt prevents unintentional overwrites.
+6. **Per-Provider Model Persistence**:
    - `app.settings["Custom AI Model"]` stores a clean JSON dictionary `{ [provider]: model }` allowing independent model memory per provider without modifying the note settings table schema.
+7. **Zero-Flicker Client-Side Configuration Updates**:
+   - Left sidebar controls (`setProvider`, `setModel`, `setPreset`, `setCustomPrompt`, `clearCustomPrompt`) execute in-DOM UI state updates instantaneously with 0ms latency and notify the host in the background with `requiresReRender = false`, preventing unnecessary iframe rebuilds and eliminating screen flashing.
 
 ---
 

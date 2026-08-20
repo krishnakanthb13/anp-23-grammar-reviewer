@@ -1,5 +1,17 @@
 # Release Notes: Amplenote Grammar & Style Reviewer
 
+## v0.0.8 (2026-08-20)
+
+### 🚀 Major Enhancements & Sandboxing Fixes
+- **In-DOM Modal Dialog Architecture**: Replaced all browser-native `window.prompt()` and `window.confirm()` calls with beautiful in-DOM sandboxed-safe dialogs (`.gr-modal-backdrop`). Fixes `Ignored call to 'prompt()'` dead clicks when using `+ Custom Prompt`, `Manual Edit`, `Re-Review`, `Reset Session`, and `Delete API Key`.
+- **Note Tags in Header**: Automatically fetches and renders assigned note tags as elegant pills (`#tag`) next to the note title in the header subtitle.
+- **Ergonomic Prompt Style Dropdown**: Converted the vertical 10-item preset list into a clean, organized `<select>` dropdown with categorized `<optgroup>`s (Correction & Polish, Conciseness & Style, Tone & Voice, Custom) paired with live style description badges.
+- **12 Unique Thematic Palettes**: Added 6 new curated light and dark themes with high-contrast readability:
+  - *Light Themes*: `Clean Daylight` (☀️), `Sepia Parchment` (📜), `Sakura Blossom` (🌸), `Matcha Latte` (🍵), `Nord Frost` (🧊).
+  - *Dark Themes*: `Midnight Slate` (🌌), `Nord Arctic` (❄️), `Glassmorphism` (✨), `Emerald Forest` (🌲), `Cyber Violet` (💜), `Espresso Obsidian` (☕), `Dracula Neo` (🧛).
+- **Sidebar Review Buttons Fix**: Restructured the review action buttons into a balanced 2-column grid with `white-space: nowrap;` and uniform heights, fixing the awkward two-line text wrapping.
+- **Zero-Flicker Left Sidebar Interactions**: Eliminated full-screen flashing when changing saved providers, active models, prompt styles, or custom instructions by executing instantaneous client-side in-DOM updates and bypassing unnecessary full iframe re-renders.
+
 ## v0.0.7 (2026-08-20)
 
 ### 🚀 Major Enhancements

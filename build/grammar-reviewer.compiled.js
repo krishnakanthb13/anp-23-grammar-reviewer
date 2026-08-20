@@ -41,12 +41,18 @@ var DEFAULT_MODELS = {
   [PROVIDERS.ANTHROPIC]: "claude-haiku-4-5-20251001"
 };
 var THEMES = [
-  { id: "midnight", name: "Midnight Slate", icon: "\u{1F30C}" },
-  { id: "nord", name: "Nord Arctic", icon: "\u2744\uFE0F" },
-  { id: "glass", name: "Glassmorphism", icon: "\u2728" },
-  { id: "emerald", name: "Emerald Forest", icon: "\u{1F332}" },
-  { id: "purple", name: "Cyber Violet", icon: "\u{1F49C}" },
-  { id: "light", name: "Clean Daylight", icon: "\u2600\uFE0F" }
+  { id: "midnight", name: "Midnight Slate", icon: "\u{1F30C}", type: "dark" },
+  { id: "nord", name: "Nord Arctic", icon: "\u2744\uFE0F", type: "dark" },
+  { id: "glass", name: "Glassmorphism", icon: "\u2728", type: "dark" },
+  { id: "emerald", name: "Emerald Forest", icon: "\u{1F332}", type: "dark" },
+  { id: "purple", name: "Cyber Violet", icon: "\u{1F49C}", type: "dark" },
+  { id: "espresso", name: "Espresso Obsidian", icon: "\u2615", type: "dark" },
+  { id: "dracula", name: "Dracula Neo", icon: "\u{1F9DB}", type: "dark" },
+  { id: "light", name: "Clean Daylight", icon: "\u2600\uFE0F", type: "light" },
+  { id: "sepia", name: "Sepia Parchment", icon: "\u{1F4DC}", type: "light" },
+  { id: "sakura", name: "Sakura Blossom", icon: "\u{1F338}", type: "light" },
+  { id: "matcha", name: "Matcha Latte", icon: "\u{1F375}", type: "light" },
+  { id: "nord-light", name: "Nord Frost", icon: "\u{1F9CA}", type: "light" }
 ];
 var MODEL_CATALOG = {
   [PROVIDERS.OPENROUTER]: [
@@ -534,6 +540,7 @@ var ReviewSession = class _ReviewSession {
   constructor({
     noteUUID = "",
     noteTitle = "Untitled Note",
+    noteTags = [],
     originalContent = "",
     granularity = GRANULARITY_MODES.FULL,
     promptPresetId = "grammar_spelling",
@@ -544,6 +551,7 @@ var ReviewSession = class _ReviewSession {
     this.sessionId = Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
     this.noteUUID = noteUUID;
     this.noteTitle = noteTitle;
+    this.noteTags = Array.isArray(noteTags) ? noteTags : typeof noteTags === "string" ? noteTags.split(",").map((t) => t.trim()).filter(Boolean) : [];
     this.originalContent = originalContent;
     this.granularity = granularity;
     this.promptPresetId = promptPresetId;
@@ -834,6 +842,7 @@ var ReviewSession = class _ReviewSession {
       sessionId: this.sessionId,
       noteUUID: this.noteUUID,
       noteTitle: this.noteTitle,
+      noteTags: this.noteTags,
       originalContent: this.originalContent,
       granularity: this.granularity,
       promptPresetId: this.promptPresetId,
@@ -856,6 +865,7 @@ var ReviewSession = class _ReviewSession {
     const session = new _ReviewSession({
       noteUUID: data.noteUUID,
       noteTitle: data.noteTitle,
+      noteTags: data.noteTags || [],
       originalContent: data.originalContent,
       granularity: data.granularity,
       promptPresetId: data.promptPresetId,
@@ -1410,25 +1420,37 @@ async function launchReviewer(app, targetNoteUUID, forcePrompt = false) {
       }
     }
     let noteContent = "";
+    let noteTags = [];
     try {
       noteContent = await app.getNoteContent({ uuid: noteUUID }) || "";
     } catch (fetchErr) {
       console.warn("[GrammarReviewer] getNoteContent error:", fetchErr);
     }
-    if (noteTitle === "Untitled Note") {
-      try {
-        const noteHandle = await app.findNote({ uuid: noteUUID });
-        if (noteHandle && noteHandle.name) {
+    try {
+      if (typeof app.getNoteTags === "function") {
+        noteTags = await app.getNoteTags({ uuid: noteUUID }) || [];
+      }
+    } catch (tagErr) {
+      console.warn("[GrammarReviewer] getNoteTags error:", tagErr);
+    }
+    try {
+      const noteHandle = await app.findNote({ uuid: noteUUID });
+      if (noteHandle) {
+        if (noteHandle.name && (noteTitle === "Untitled Note" || !noteTitle)) {
           noteTitle = noteHandle.name;
         }
-      } catch (findErr) {
-        console.warn("[GrammarReviewer] findNote error:", findErr);
+        if ((!noteTags || noteTags.length === 0) && Array.isArray(noteHandle.tags)) {
+          noteTags = noteHandle.tags;
+        }
       }
+    } catch (findErr) {
+      console.warn("[GrammarReviewer] findNote error:", findErr);
     }
     const config = getProviderConfig(app);
     const session = new ReviewSession({
       noteUUID,
       noteTitle,
+      noteTags,
       originalContent: noteContent,
       granularity: GRANULARITY_MODES.FULL,
       provider: config.provider,
@@ -1538,9 +1560,11 @@ async function handleReviewAll(app) {
 function handleSetGranularity(app, newMode) {
   const session = getActiveSession();
   if (!session) return;
+  if (session.granularity === newMode) return;
   const newSession = new ReviewSession({
     noteUUID: session.noteUUID,
     noteTitle: session.noteTitle,
+    noteTags: session.noteTags || [],
     originalContent: session.originalContent,
     granularity: newMode,
     promptPresetId: session.promptPresetId,
@@ -2019,6 +2043,50 @@ var EMBED_STYLES = `
   --card-shadow: 0 4px 24px rgba(168, 85, 247, 0.2);
 }
 
+/* Theme: Espresso Obsidian (Dark) */
+[data-theme="espresso"] {
+  --bg-primary: #14100c;
+  --bg-secondary: #1f1812;
+  --bg-card: #2c221a;
+  --bg-card-hover: #3b2e23;
+  --border-color: rgba(245, 158, 11, 0.15);
+  --border-subtle: rgba(245, 158, 11, 0.08);
+  --border-active: #f59e0b;
+  --text-primary: #fef3c7;
+  --text-secondary: #d4b996;
+  --text-muted: #a3886b;
+  --accent-primary: #f59e0b;
+  --accent-hover: #d97706;
+  --accent-success: #34d399;
+  --accent-success-bg: rgba(52, 211, 153, 0.2);
+  --accent-danger: #f87171;
+  --accent-danger-bg: rgba(248, 113, 113, 0.2);
+  --accent-warning: #fbbf24;
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* Theme: Dracula Neo (Dark) */
+[data-theme="dracula"] {
+  --bg-primary: #1e1f29;
+  --bg-secondary: #282a36;
+  --bg-card: #343746;
+  --bg-card-hover: #44475a;
+  --border-color: rgba(189, 147, 249, 0.2);
+  --border-subtle: rgba(189, 147, 249, 0.1);
+  --border-active: #ff79c6;
+  --text-primary: #f8f8f2;
+  --text-secondary: #bd93f9;
+  --text-muted: #6272a4;
+  --accent-primary: #8be9fd;
+  --accent-hover: #ff79c6;
+  --accent-success: #50fa7b;
+  --accent-success-bg: rgba(80, 250, 123, 0.2);
+  --accent-danger: #ff5555;
+  --accent-danger-bg: rgba(255, 85, 85, 0.2);
+  --accent-warning: #f1fa8c;
+  --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
 /* Theme: Clean Daylight (Light Mode) */
 [data-theme="light"] {
   --bg-primary: #f8fafc;
@@ -2040,6 +2108,98 @@ var EMBED_STYLES = `
   --accent-warning: #d97706;
   --card-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
   --btn-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Theme: Sepia Parchment (Light Mode) */
+[data-theme="sepia"] {
+  --bg-primary: #fbf7ee;
+  --bg-secondary: #f4ede0;
+  --bg-card: #eae1d0;
+  --bg-card-hover: #dfd4c0;
+  --border-color: #dcd0bc;
+  --border-subtle: #eadecb;
+  --border-active: #b45309;
+  --text-primary: #2d2319;
+  --text-secondary: #5f4b39;
+  --text-muted: #8b735c;
+  --accent-primary: #b45309;
+  --accent-hover: #92400e;
+  --accent-success: #15803d;
+  --accent-success-bg: rgba(21, 128, 61, 0.15);
+  --accent-danger: #b91c1c;
+  --accent-danger-bg: rgba(185, 28, 28, 0.12);
+  --accent-warning: #d97706;
+  --card-shadow: 0 2px 12px rgba(95, 75, 57, 0.08);
+  --btn-shadow: 0 1px 3px rgba(95, 75, 57, 0.06);
+}
+
+/* Theme: Sakura Blossom (Light Mode) */
+[data-theme="sakura"] {
+  --bg-primary: #fff5f7;
+  --bg-secondary: #ffedf2;
+  --bg-card: #fde2e8;
+  --bg-card-hover: #fbcad5;
+  --border-color: #f9c2cf;
+  --border-subtle: #fde2e8;
+  --border-active: #e11d48;
+  --text-primary: #37121c;
+  --text-secondary: #6e2c3e;
+  --text-muted: #9e4b62;
+  --accent-primary: #e11d48;
+  --accent-hover: #be123c;
+  --accent-success: #059669;
+  --accent-success-bg: rgba(5, 150, 105, 0.15);
+  --accent-danger: #e11d48;
+  --accent-danger-bg: rgba(225, 29, 72, 0.12);
+  --accent-warning: #d97706;
+  --card-shadow: 0 2px 14px rgba(225, 29, 72, 0.08);
+  --btn-shadow: 0 1px 3px rgba(225, 29, 72, 0.06);
+}
+
+/* Theme: Matcha Latte (Light Mode) */
+[data-theme="matcha"] {
+  --bg-primary: #f6f8f5;
+  --bg-secondary: #edf2eb;
+  --bg-card: #dce6d8;
+  --bg-card-hover: #cddbc8;
+  --border-color: #cbd8c5;
+  --border-subtle: #dce6d8;
+  --border-active: #15803d;
+  --text-primary: #17281c;
+  --text-secondary: #36503c;
+  --text-muted: #57735e;
+  --accent-primary: #15803d;
+  --accent-hover: #166534;
+  --accent-success: #15803d;
+  --accent-success-bg: rgba(21, 128, 61, 0.15);
+  --accent-danger: #dc2626;
+  --accent-danger-bg: rgba(220, 38, 38, 0.12);
+  --accent-warning: #b45309;
+  --card-shadow: 0 2px 12px rgba(23, 40, 28, 0.08);
+  --btn-shadow: 0 1px 3px rgba(23, 40, 28, 0.06);
+}
+
+/* Theme: Nord Frost (Light Mode) */
+[data-theme="nord-light"] {
+  --bg-primary: #f4f6f9;
+  --bg-secondary: #e9edf2;
+  --bg-card: #dce3eb;
+  --bg-card-hover: #cbd5e1;
+  --border-color: #cbd5e1;
+  --border-subtle: #dce3eb;
+  --border-active: #0284c7;
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --accent-primary: #0284c7;
+  --accent-hover: #0369a1;
+  --accent-success: #059669;
+  --accent-success-bg: rgba(5, 150, 105, 0.15);
+  --accent-danger: #e11d48;
+  --accent-danger-bg: rgba(225, 29, 72, 0.12);
+  --accent-warning: #d97706;
+  --card-shadow: 0 2px 12px rgba(30, 41, 59, 0.08);
+  --btn-shadow: 0 1px 3px rgba(30, 41, 59, 0.05);
 }
 
 * {
@@ -3042,19 +3202,172 @@ kbd {
   gap: 14px;
   box-shadow: var(--card-shadow);
 }
-.gr-form-group {
+/* Tag Pills */
+.gr-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--bg-card);
+  color: var(--accent-primary);
+  border: 1px solid var(--border-color);
+  line-height: 1.3;
+}
+
+/* Universal Sandboxed-Safe In-DOM Modal */
+.gr-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.15s ease-out;
+}
+.gr-modal-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  width: 100%;
+  max-width: 520px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  overflow: hidden;
+  animation: modalSlideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.gr-form-label {
-  font-size: 12px;
-  font-weight: 600;
+@keyframes modalSlideUp {
+  from { transform: translateY(20px) scale(0.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+.gr-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-color);
+}
+.gr-modal-title {
+  font-size: 14.5px;
+  font-weight: 700;
   color: var(--text-primary);
+  margin: 0;
 }
-.gr-form-help {
-  font-size: 11px;
+.gr-modal-close {
+  background: none;
+  border: none;
   color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: var(--radius-xs);
+}
+.gr-modal-close:hover {
+  color: var(--text-primary);
+  background: var(--bg-card);
+}
+.gr-modal-body {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.gr-modal-message {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+  margin: 0;
+}
+.gr-modal-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 13px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  outline: none;
+}
+.gr-modal-input:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-hover);
+}
+.gr-modal-textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  line-height: 1.45;
+}
+.gr-modal-textarea:focus {
+  border-color: var(--accent-primary);
+}
+.gr-modal-radio-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.gr-modal-radio-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.gr-modal-radio-item:hover, .gr-modal-radio-item.selected {
+  border-color: var(--accent-primary);
+  background: var(--bg-card-hover);
+}
+.gr-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  background: rgba(0, 0, 0, 0.12);
+  border-top: 1px solid var(--border-color);
+}
+
+.gr-sidebar-btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+  width: 100%;
+}
+.gr-sidebar-btn-row .gr-btn {
+  width: 100%;
+  min-height: 38px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 8px 6px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
 }
 `;
 
@@ -3079,16 +3392,8 @@ function renderSidebarPanel(session, config, metrics) {
   const modelOptionsHtml = catalog.map((m) => {
     return `<option value="${escapeHtml(m.value)}" ${m.value === currentModel ? "selected" : ""}>${escapeHtml(m.label)}</option>`;
   }).join("") + (isCustomModel ? `<option value="${escapeHtml(currentModel)}" selected>Custom: ${escapeHtml(currentModel)}</option>` : "");
-  const presetButtons = PREBUILT_PROMPTS.map((preset) => {
-    const isActive = preset.id === currentPreset && !session?.customPrompt;
-    return `
-      <button class="gr-preset-item ${isActive ? "active" : ""}" 
-              title="${preset.description}" 
-              onclick="sendAction('setPreset', '${preset.id}')">
-        ${preset.name}
-      </button>
-    `;
-  }).join("");
+  const matchedPreset = PREBUILT_PROMPTS.find((p) => p.id === currentPreset) || PREBUILT_PROMPTS[0];
+  const currentPresetDesc = matchedPreset ? matchedPreset.description : "Refines grammar and prose.";
   const pendingCount = metrics.pending ?? 0;
   const reviewBtnLabel = getSidebarReviewBtnText(currentStatus);
   return `
@@ -3104,24 +3409,24 @@ function renderSidebarPanel(session, config, metrics) {
       <div style="display: flex; flex-direction: column; gap: 6px;">
         <div>
           <span class="gr-form-sublabel">Saved Provider</span>
-          <select id="quick-provider-select" class="gr-select" style="width: 100%;" onchange="sendAction('setProvider', this.value)">
+          <select id="quick-provider-select" class="gr-select" style="width: 100%;" onchange="handleQuickProviderChange(this.value)">
             ${providerOptionsHtml}
           </select>
         </div>
 
         <div>
           <span class="gr-form-sublabel">Active Model</span>
-          <select id="quick-model-select" class="gr-select" style="width: 100%;" onchange="sendAction('setModel', this.value)">
+          <select id="quick-model-select" class="gr-select" style="width: 100%;" onchange="handleQuickModelChange(this.value)">
             ${modelOptionsHtml}
           </select>
         </div>
       </div>
 
-      <div class="gr-sidebar-btn-row" style="display: flex; gap: 8px; margin-top: 6px;">
-        <button class="gr-btn btn-primary" style="flex: 1; justify-content: center;" onclick="sendAction('runReview')">
+      <div class="gr-sidebar-btn-row">
+        <button class="gr-btn btn-primary" title="Review active chunk" onclick="sendAction('runReview')">
           ${reviewBtnLabel}
         </button>
-        <button class="gr-btn btn-secondary" style="padding: 8px 12px; white-space: nowrap;" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
+        <button class="gr-btn btn-secondary" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
           \u26A1 All Pending ${pendingCount > 0 ? `(${pendingCount})` : ""}
         </button>
       </div>
@@ -3133,28 +3438,49 @@ function renderSidebarPanel(session, config, metrics) {
         <span class="gr-section-title">GRANULARITY</span>
       </div>
       <div class="gr-segmented-control">
-        <button class="gr-segment-btn ${currentGranularity === "full" ? "active" : ""}" onclick="sendAction('setGranularity', 'full')">Full Note</button>
-        <button class="gr-segment-btn ${currentGranularity === "paragraph" ? "active" : ""}" onclick="sendAction('setGranularity', 'paragraph')">Paragraph</button>
-        <button class="gr-segment-btn ${currentGranularity === "sentence" ? "active" : ""}" onclick="sendAction('setGranularity', 'sentence')">Sentence</button>
+        <button id="granularity-btn-full" class="gr-segment-btn ${currentGranularity === "full" ? "active" : ""}" onclick="handleGranularityChange('full')">Full Note</button>
+        <button id="granularity-btn-paragraph" class="gr-segment-btn ${currentGranularity === "paragraph" ? "active" : ""}" onclick="handleGranularityChange('paragraph')">Paragraph</button>
+        <button id="granularity-btn-sentence" class="gr-segment-btn ${currentGranularity === "sentence" ? "active" : ""}" onclick="handleGranularityChange('sentence')">Sentence</button>
       </div>
     </div>
 
-    <!-- Section 3: Prompt Style Presets -->
+    <!-- Section 3: Prompt Style Presets (Ergonomic Dropdown) -->
     <div class="gr-sidebar-section">
       <div class="gr-sidebar-header">
         <span class="gr-section-title">PROMPT STYLE</span>
-        <button class="gr-btn-link" onclick="promptCustomInstruction()">+ Custom</button>
+        <button class="gr-btn-link" onclick="openCustomPromptModal()">+ Custom</button>
       </div>
-      <div class="gr-preset-list">
-        ${presetButtons}
+
+      <select id="preset-style-select" class="gr-select" style="width: 100%; font-weight: 500;" onchange="handlePresetSelectChange(this.value)">
+        <optgroup label="Correction & Polish">
+          <option value="grammar_spelling" ${currentPreset === "grammar_spelling" && !session?.customPrompt ? "selected" : ""}>Fix Grammar & Spelling</option>
+          <option value="minimal_changes" ${currentPreset === "minimal_changes" && !session?.customPrompt ? "selected" : ""}>Minimal Changes (Preserve Voice)</option>
+          <option value="teacher_editor" ${currentPreset === "teacher_editor" && !session?.customPrompt ? "selected" : ""}>Teacher & Coach (Clarity & Flow)</option>
+        </optgroup>
+        <optgroup label="Conciseness & Style">
+          <option value="concise" ${currentPreset === "concise" && !session?.customPrompt ? "selected" : ""}>Shorten & Make Concise</option>
+          <option value="passive_voice" ${currentPreset === "passive_voice" && !session?.customPrompt ? "selected" : ""}>Remove Passive Voice</option>
+          <option value="adverbs" ${currentPreset === "adverbs" && !session?.customPrompt ? "selected" : ""}>Omit Unnecessary Adverbs</option>
+          <option value="flow_readability" ${currentPreset === "flow_readability" && !session?.customPrompt ? "selected" : ""}>Improve Flow & Rhythm</option>
+        </optgroup>
+        <optgroup label="Tone & Voice">
+          <option value="professional" ${currentPreset === "professional" && !session?.customPrompt ? "selected" : ""}>Professional & Business Tone</option>
+          <option value="academic" ${currentPreset === "academic" && !session?.customPrompt ? "selected" : ""}>Academic & Analytical Tone</option>
+          <option value="humorous" ${currentPreset === "humorous" && !session?.customPrompt ? "selected" : ""}>Add Subtle Humor & Wit</option>
+        </optgroup>
+        <optgroup label="Custom Guidance">
+          <option value="__custom__" ${session?.customPrompt ? "selected" : ""}>\u2728 Custom Prompt Override...</option>
+        </optgroup>
+      </select>
+
+      <div id="preset-description-badge" style="font-size: 11px; color: var(--text-secondary); line-height: 1.4; padding: 6px 10px; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border-color);">
+        ${session?.customPrompt ? `\u{1F3AF} <em>Custom:</em> "${escapeHtml(session.customPrompt)}"` : `\u{1F4A1} ${escapeHtml(currentPresetDesc)}`}
       </div>
-      ${session?.customPrompt ? `
-        <div class="gr-custom-prompt-box">
-          <div style="font-weight: 700; color: var(--text-primary);">Custom Prompt:</div>
-          <div style="font-style: italic; margin: 3px 0 5px 0; line-height: 1.35;">"${escapeHtml(session.customPrompt)}"</div>
-          <button class="gr-btn-link" style="color: var(--accent-danger);" onclick="sendAction('clearCustomPrompt')">\u2715 Clear custom</button>
-        </div>
-      ` : ""}
+
+      <div id="custom-prompt-actions" style="display: ${session?.customPrompt ? "flex" : "none"}; gap: 8px; justify-content: flex-end;">
+        <button class="gr-btn-link" style="font-size: 11px;" onclick="openCustomPromptModal()">\u270F\uFE0F Edit Prompt</button>
+        <button class="gr-btn-link" style="color: var(--accent-danger); font-size: 11px;" onclick="handleClearCustomPrompt()">\u2715 Clear Custom</button>
+      </div>
     </div>
 
     <!-- Section 4: Review Progress & Queue -->
@@ -3191,16 +3517,16 @@ function renderSidebarPanel(session, config, metrics) {
 }
 function getSidebarReviewBtnText(status) {
   switch (status) {
-    case "pending":
-      return "\u26A1 Review Item";
     case "suggestion_ready":
-      return "\u{1F504} Re-Review Item";
+      return "\u{1F504} Re-Review";
     case "accepted":
-      return "\u{1F504} Re-Review";
+      return "\u2713 Re-Review";
     case "rejected":
-      return "\u{1F504} Re-Review";
+      return "\u2715 Re-Review";
     case "modified":
-      return "\u{1F504} Re-Review";
+      return "\u270E Re-Review";
+    case "reviewing":
+      return "\u26A1 Reviewing...";
     default:
       return "\u26A1 Review Item";
   }
@@ -3512,6 +3838,24 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
 </head>
 <body>
   
+  <!-- Universal Sandboxed-Safe In-DOM Modal Dialog -->
+  <div id="gr-modal-backdrop" class="gr-modal-backdrop" style="display: none;">
+    <div class="gr-modal-box">
+      <div class="gr-modal-header">
+        <h3 id="gr-modal-title" class="gr-modal-title">Dialog</h3>
+        <button class="gr-modal-close" onclick="closeAppModal()">\u2715</button>
+      </div>
+      <div id="gr-modal-body" class="gr-modal-body">
+        <p id="gr-modal-message" class="gr-modal-message"></p>
+        <div id="gr-modal-input-container"></div>
+      </div>
+      <div class="gr-modal-footer">
+        <button id="gr-modal-btn-cancel" class="gr-btn btn-secondary" onclick="closeAppModal()">Cancel</button>
+        <button id="gr-modal-btn-confirm" class="gr-btn btn-primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Global Top Operation Progress Bar & Live Banner -->
   <div id="top-loader" class="gr-top-loader"><div class="gr-top-loader-bar"></div></div>
   <div id="op-banner" class="gr-op-banner">
@@ -3530,8 +3874,13 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         <div class="gr-logo">\u{1F9D1}\u200D\u{1F3EB}</div>
         <div>
           <h1 class="gr-title">Grammar & Style Reviewer</h1>
-          <div class="gr-subtitle" style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+          <div class="gr-subtitle" style="display: flex; align-items: center; gap: 8px; margin-top: 2px; flex-wrap: wrap;">
             <span>Note: <strong>${escapeHtml(session?.noteTitle || "No Note Selected")}</strong></span>
+            ${session?.noteTags && session.noteTags.length > 0 ? `
+              <div style="display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+                ${session.noteTags.map((t) => `<span class="gr-tag-pill">#${escapeHtml(String(t).replace(/^#/, ""))}</span>`).join("")}
+              </div>
+            ` : ""}
             <button class="gr-btn btn-secondary" style="padding: 2px 8px; font-size: 11px;" onclick="sendAction('selectNote')">
               \u{1F4C2} ${session ? "Change Note" : "Select Note"}
             </button>
@@ -3650,25 +3999,277 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       sendAction("cancelReviewAll");
     }
 
-    // Re-Review with reason picker
-    function openReReviewDialog(index) {
-      const reasons = RE_REVIEW_REASONS;
-      const optionsText = reasons.map((r, i) => (i + 1) + ". " + r.label).join("\\n");
-      const choice = prompt("Why are you re-reviewing Item #" + (index + 1) + "?\\n\\n" + optionsText + "\\n\\nEnter number (1-" + reasons.length + "):", "1");
-      if (!choice) return;
+    // ==========================================
+    // Universal Sandboxed-Safe In-DOM Modal System
+    // (Bypasses iframe sandboxing where window.prompt is ignored)
+    // ==========================================
+    let activeModalCallback = null;
 
-      const num = parseInt(choice.trim(), 10);
-      if (num >= 1 && num <= reasons.length) {
-        const selected = reasons[num - 1];
-        let instruction = selected.prompt;
-        if (selected.id === "custom") {
-          const custom = prompt("Enter specific editing guidance for AI:");
-          if (!custom || !custom.trim()) return;
-          instruction = custom.trim();
-        }
-        setTopLoading(true, "Re-reviewing Item #" + (index + 1) + " (" + selected.label + ")...");
-        sendAction("reReviewItem", index, instruction);
+    function closeAppModal() {
+      const backdrop = document.getElementById("gr-modal-backdrop");
+      if (backdrop) backdrop.style.display = "none";
+      activeModalCallback = null;
+    }
+
+    function showAppPrompt({ title = "Input", message = "", defaultValue = "", isTextarea = false, placeholder = "", onConfirm }) {
+      const backdrop = document.getElementById("gr-modal-backdrop");
+      const titleElem = document.getElementById("gr-modal-title");
+      const msgElem = document.getElementById("gr-modal-message");
+      const inputContainer = document.getElementById("gr-modal-input-container");
+      const confirmBtn = document.getElementById("gr-modal-btn-confirm");
+
+      if (!backdrop || !inputContainer) return;
+
+      titleElem.innerText = title;
+      msgElem.innerText = message;
+      msgElem.style.display = message ? "block" : "none";
+
+      const inputId = "gr-modal-active-input";
+      if (isTextarea) {
+        inputContainer.innerHTML = '<textarea id="' + inputId + '" class="gr-modal-textarea" placeholder="' + (placeholder || '') + '">' + (defaultValue || '') + '</textarea>';
+      } else {
+        inputContainer.innerHTML = '<input type="text" id="' + inputId + '" class="gr-modal-input" placeholder="' + (placeholder || '') + '" value="' + (defaultValue || '') + '">';
       }
+
+      confirmBtn.className = "gr-btn btn-primary";
+      confirmBtn.innerText = "Confirm";
+
+      activeModalCallback = () => {
+        const val = document.getElementById(inputId)?.value;
+        closeAppModal();
+        if (typeof onConfirm === "function") onConfirm(val);
+      };
+
+      confirmBtn.onclick = activeModalCallback;
+      backdrop.style.display = "flex";
+
+      setTimeout(() => {
+        const el = document.getElementById(inputId);
+        if (el) { el.focus(); if (el.select) el.select(); }
+      }, 50);
+    }
+
+    function showAppConfirm({ title = "Confirm", message = "", confirmLabel = "Confirm", isDanger = false, onConfirm }) {
+      const backdrop = document.getElementById("gr-modal-backdrop");
+      const titleElem = document.getElementById("gr-modal-title");
+      const msgElem = document.getElementById("gr-modal-message");
+      const inputContainer = document.getElementById("gr-modal-input-container");
+      const confirmBtn = document.getElementById("gr-modal-btn-confirm");
+
+      if (!backdrop) return;
+
+      titleElem.innerText = title;
+      msgElem.innerText = message;
+      msgElem.style.display = "block";
+      if (inputContainer) inputContainer.innerHTML = "";
+
+      confirmBtn.className = isDanger ? "gr-btn btn-danger" : "gr-btn btn-primary";
+      confirmBtn.innerText = confirmLabel;
+
+      activeModalCallback = () => {
+        closeAppModal();
+        if (typeof onConfirm === "function") onConfirm();
+      };
+
+      confirmBtn.onclick = activeModalCallback;
+      backdrop.style.display = "flex";
+    }
+
+    function showAppChoice({ title = "Select Option", message = "", options = [], defaultSelected = "", onConfirm }) {
+      const backdrop = document.getElementById("gr-modal-backdrop");
+      const titleElem = document.getElementById("gr-modal-title");
+      const msgElem = document.getElementById("gr-modal-message");
+      const inputContainer = document.getElementById("gr-modal-input-container");
+      const confirmBtn = document.getElementById("gr-modal-btn-confirm");
+
+      if (!backdrop || !inputContainer) return;
+
+      titleElem.innerText = title;
+      msgElem.innerText = message;
+      msgElem.style.display = message ? "block" : "none";
+
+      const selectedVal = defaultSelected || (options[0] && options[0].id) || "";
+
+      const optionsHtml = options.map((opt, i) => {
+        const isSel = opt.id === selectedVal || (!selectedVal && i === 0);
+        return '<label class="gr-modal-radio-item ' + (isSel ? 'selected' : '') + '" data-opt-id="' + opt.id + '" onclick="selectModalRadioOption(this.dataset.optId)">' +
+          '<input type="radio" name="modal_choice" value="' + opt.id + '" ' + (isSel ? 'checked' : '') + ' style="margin-top: 3px;">' +
+          '<div>' +
+            '<div style="font-weight: 600; font-size: 12.5px; color: var(--text-primary);">' + (opt.label || opt.name) + '</div>' +
+            (opt.desc ? '<div style="font-size: 11px; color: var(--text-secondary); margin-top: 2px;">' + opt.desc + '</div>' : '') +
+          '</div>' +
+        '</label>';
+      }).join("");
+
+      inputContainer.innerHTML = '<div class="gr-modal-radio-list">' + optionsHtml + '</div>' +
+        '<div id="modal-custom-subinput-area" style="margin-top: 8px; display: none;">' +
+          '<input type="text" id="modal-custom-subinput" class="gr-modal-input" placeholder="Enter custom prompt guidance...">' +
+        '</div>';
+
+
+      confirmBtn.className = "gr-btn btn-primary";
+      confirmBtn.innerText = "Select & Apply";
+
+      activeModalCallback = () => {
+        const checkedRadio = document.querySelector('input[name="modal_choice"]:checked');
+        const choiceId = checkedRadio ? checkedRadio.value : selectedVal;
+        const customSub = document.getElementById("modal-custom-subinput")?.value || "";
+        closeAppModal();
+        if (typeof onConfirm === "function") onConfirm(choiceId, customSub);
+      };
+
+      confirmBtn.onclick = activeModalCallback;
+      backdrop.style.display = "flex";
+    }
+
+    function selectModalRadioOption(val) {
+      document.querySelectorAll(".gr-modal-radio-item").forEach(el => {
+        const input = el.querySelector("input");
+        if (input) {
+          const isMatch = input.value === val;
+          input.checked = isMatch;
+          el.classList.toggle("selected", isMatch);
+        }
+      });
+      const subArea = document.getElementById("modal-custom-subinput-area");
+      if (subArea) {
+        subArea.style.display = val === "custom" ? "block" : "none";
+        if (val === "custom") {
+          document.getElementById("modal-custom-subinput")?.focus();
+        }
+      }
+    }
+
+    // Fast In-DOM Left Sidebar Handlers (Zero Screen Flash)
+    function handleQuickProviderChange(provider) {
+      const modelSelect = document.getElementById("quick-model-select");
+      if (modelSelect && MODEL_CATALOG[provider]) {
+        const catalog = MODEL_CATALOG[provider] || [];
+        const savedModel = (ALL_SAVED_MODELS && ALL_SAVED_MODELS[provider]) || (catalog[0] && catalog[0].value) || "";
+        modelSelect.innerHTML = catalog.map(m => {
+          return '<option value="' + m.value + '" ' + (m.value === savedModel ? 'selected' : '') + '>' + m.label + '</option>';
+        }).join("");
+      }
+      sendAction("setProvider", provider);
+    }
+
+    function handleQuickModelChange(model) {
+      const provider = document.getElementById("quick-provider-select")?.value;
+      if (provider && ALL_SAVED_MODELS) {
+        ALL_SAVED_MODELS[provider] = model;
+      }
+      sendAction("setModel", model);
+    }
+
+    function handleGranularityChange(mode) {
+      const activeBtn = document.querySelector(".gr-segment-btn.active");
+      const currentMode = activeBtn?.id?.replace("granularity-btn-", "") || "";
+      if (currentMode === mode) return;
+
+      document.querySelectorAll(".gr-segmented-control .gr-segment-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.id === "granularity-btn-" + mode);
+      });
+
+      sendAction("setGranularity", mode);
+    }
+
+    const PRESET_DESCRIPTIONS = {
+      "grammar_spelling": "Corrects grammatical errors, typos, spelling, and subject-verb agreement while preserving your exact phrasing.",
+      "minimal_changes": "Only fixes objective spelling and grammar errors. Keeps your unique phrasing, cadence, and structure intact.",
+      "teacher_editor": "Provides educational commentary, highlights specific clarity improvements, and explains why each change elevates the writing.",
+      "concise": "Trims bloat, redundant phrases, and wordy constructions while preserving core meaning.",
+      "passive_voice": "Converts passive constructions to clear, vigorous active voice.",
+      "adverbs": "Removes unnecessary filler adverbs (very, really, definitely) to strengthen verbs.",
+      "flow_readability": "Enhances transitions, sentence rhythm, and syntactic variety for smooth reading.",
+      "professional": "Polishes language for business emails, executive summaries, and stakeholder memos.",
+      "academic": "Refines prose for formal research papers, essays, and critical analysis.",
+      "humorous": "Injects subtle wit, clever metaphors, and lively expressions without derailing context."
+    };
+
+    function handlePresetSelectChange(val) {
+      const descBadge = document.getElementById("preset-description-badge");
+      const customActions = document.getElementById("custom-prompt-actions");
+
+      if (val === "__custom__") {
+        openCustomPromptModal();
+        return;
+      }
+
+      if (descBadge) {
+        const desc = PRESET_DESCRIPTIONS[val] || "Refines grammar and prose.";
+        descBadge.innerHTML = '\u{1F4A1} ' + desc;
+      }
+      if (customActions) {
+        customActions.style.display = "none";
+      }
+
+      sendAction("setPreset", val);
+    }
+
+    function handleClearCustomPrompt() {
+      const select = document.getElementById("preset-style-select");
+      const descBadge = document.getElementById("preset-description-badge");
+      const customActions = document.getElementById("custom-prompt-actions");
+
+      if (select) select.value = "grammar_spelling";
+      if (descBadge) {
+        descBadge.innerHTML = '\u{1F4A1} ' + (PRESET_DESCRIPTIONS["grammar_spelling"] || "Refines grammar and prose.");
+      }
+      if (customActions) {
+        customActions.style.display = "none";
+      }
+
+      sendAction("clearCustomPrompt");
+    }
+
+    // Modal-driven custom prompt editor
+    function openCustomPromptModal() {
+      const cur = serverSession?.customPrompt || "";
+      showAppPrompt({
+        title: "Custom AI Prompt / Instruction",
+        message: "Provide specific guidance for how the AI should edit or polish your text:",
+        defaultValue: cur,
+        isTextarea: true,
+        placeholder: "e.g. Make concise, preserve bullet points, use active voice, sound friendly...",
+        onConfirm: (val) => {
+          if (val && val.trim().length > 0) {
+            const trimmed = val.trim();
+            const select = document.getElementById("preset-style-select");
+            const descBadge = document.getElementById("preset-description-badge");
+            const customActions = document.getElementById("custom-prompt-actions");
+
+            if (select) select.value = "__custom__";
+            if (descBadge) {
+              descBadge.innerHTML = '\u{1F3AF} <em>Custom:</em> "' + trimmed.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;') + '"';
+            }
+            if (customActions) {
+              customActions.style.display = "flex";
+            }
+            sendAction("setCustomPrompt", trimmed);
+          } else {
+            handleClearCustomPrompt();
+          }
+        }
+      });
+    }
+
+    // Re-Review with in-DOM reason picker modal
+    function openReReviewDialog(index) {
+      showAppChoice({
+        title: "Re-Review Item #" + (index + 1),
+        message: "Why would you like to re-review this section?",
+        options: RE_REVIEW_REASONS,
+        defaultSelected: "too_aggressive",
+        onConfirm: (choiceId, customSub) => {
+          const selected = RE_REVIEW_REASONS.find(r => r.id === choiceId) || RE_REVIEW_REASONS[0];
+          let instruction = selected.prompt;
+          if (choiceId === "custom" && customSub && customSub.trim().length > 0) {
+            instruction = customSub.trim();
+          }
+          setTopLoading(true, "Re-reviewing Item #" + (index + 1) + " (" + selected.label + ")...");
+          sendAction("reReviewItem", index, instruction);
+        }
+      });
     }
 
     // 4 Diff View Modes (Clean Prose, Inline Diff, Side-by-Side, Changes Only)
@@ -3813,20 +4414,33 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     }
 
     function confirmResetSession() {
-      if (confirm("Reset current review session and clear in-progress changes?")) {
-        try {
-          localStorage.removeItem(STORAGE_KEY);
-        } catch (e) {}
-        sendAction("clearSession");
-      }
+      showAppConfirm({
+        title: "Reset Review Session?",
+        message: "Are you sure you want to reset the current review session and clear in-progress changes? This will restore the original note baseline.",
+        confirmLabel: "Yes, Reset",
+        isDanger: true,
+        onConfirm: () => {
+          try {
+            localStorage.removeItem(STORAGE_KEY);
+          } catch (e) {}
+          sendAction("clearSession");
+        }
+      });
     }
 
     function promptManualEdit(index) {
       const currentText = document.getElementById("suggestion-pane-" + index)?.innerText || "";
-      const edited = prompt("Edit suggestion manually:", currentText);
-      if (edited !== null) {
-        sendAction("manualEditItem", index, edited);
-      }
+      showAppPrompt({
+        title: "Manual Edit (Item #" + (index + 1) + ")",
+        message: "Directly edit the rewritten text:",
+        defaultValue: currentText,
+        isTextarea: true,
+        onConfirm: (edited) => {
+          if (edited !== null && edited !== undefined) {
+            sendAction("manualEditItem", index, edited);
+          }
+        }
+      });
     }
 
     // Synchronized Scrolling for Dual-Pane Diff View
@@ -3877,13 +4491,6 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     // Initialize Scroll Sync
     initScrollSync();
 
-    function promptCustomInstruction() {
-      const custom = prompt("Enter your custom AI editing prompt/instruction:");
-      if (custom && custom.trim().length > 0) {
-        sendAction("setCustomPrompt", custom.trim());
-      }
-    }
-
     const ALL_SAVED_KEYS = ${JSON.stringify(config.allKeys || {})};
     const ALL_SAVED_MODELS = ${JSON.stringify(config.allModels || {})};
 
@@ -3915,19 +4522,26 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       const previewBanner = document.getElementById("key-preview-banner");
       const currentProvider = providerInput?.value;
 
-      if (confirm("Delete / clear saved API key for " + currentProvider + "?")) {
-        if (keyInput) {
-          keyInput.value = "";
-          keyInput.placeholder = "Enter new " + currentProvider + " API Key";
+      showAppConfirm({
+        title: "Clear Saved API Key?",
+        message: "Delete and clear the saved API key for " + currentProvider + "?",
+        confirmLabel: "Delete Key",
+        isDanger: true,
+        onConfirm: () => {
+          if (keyInput) {
+            keyInput.value = "";
+            keyInput.placeholder = "Enter new " + currentProvider + " API Key";
+          }
+          if (currentProvider && ALL_SAVED_KEYS[currentProvider]) {
+            ALL_SAVED_KEYS[currentProvider] = "";
+          }
+          if (previewBanner) {
+            previewBanner.innerHTML = '<span style="color: var(--accent-warning);">\u26A0\uFE0F No key saved \u2014 enter key below</span>';
+          }
         }
-        if (currentProvider && ALL_SAVED_KEYS[currentProvider]) {
-          ALL_SAVED_KEYS[currentProvider] = "";
-        }
-        if (previewBanner) {
-          previewBanner.innerHTML = '<span style="color: var(--accent-warning);">\u26A0\uFE0F No key saved \u2014 enter key below</span>';
-        }
-      }
+      });
     }
+
 
     // Instant Settings Provider Selection
     function selectProviderCard(providerKey) {
@@ -4397,6 +5011,7 @@ var plugin = {
               await app.setSetting("AI Provider", newProvider);
             }
           }
+          requiresReRender = false;
           break;
         }
         case "setModel": {
@@ -4412,6 +5027,7 @@ var plugin = {
               await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }
           }
+          requiresReRender = false;
           break;
         }
         case "setPreset":
@@ -4419,16 +5035,19 @@ var plugin = {
             session.promptPresetId = args[1];
             session.customPrompt = "";
           }
+          requiresReRender = false;
           break;
         case "setCustomPrompt":
           if (session) {
             session.customPrompt = args[1];
           }
+          requiresReRender = false;
           break;
         case "clearCustomPrompt":
           if (session) {
             session.customPrompt = "";
           }
+          requiresReRender = false;
           break;
         case "runReview":
           await handleRunReview(app, typeof args[1] === "number" ? args[1] : -1, args[2] || "");

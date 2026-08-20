@@ -1,6 +1,6 @@
 # 🧑‍🏫 Amplenote Grammar & Style Reviewer Plugin
 
-A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally inspect, diff, accept/reject, and refine grammar, structure, tone, and conciseness suggestions across your notes with clean side-by-side readable diffs, synchronized dual-pane scrolling, 100% full-width workspace, 6 dynamic themes, per-provider model memory, and optional audit logging (turned off by default).
+A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally inspect, diff, accept/reject, and refine grammar, structure, tone, and conciseness suggestions across your notes with clean side-by-side readable diffs, synchronized dual-pane scrolling, 100% full-width workspace, 12 dynamic themes, zero-flicker client sidebar reactivity, per-provider model memory, and optional audit logging (turned off by default).
 
 ---
 
@@ -11,6 +11,8 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - `🔀 Inline Diff`: Traditional unified diff with inline `<del>` and `<ins>` highlights.
   - `👥 Side-by-Side`: Dual-pane side-by-side comparison with original strikethroughs and suggestion insertions.
   - `📋 Changes Only`: Filtered list of distinct modifications ("old" → "new", additions, removals) with change numbers and type badges.
+- **Zero-Flicker Client-Side Left Sidebar Reactivity**:
+  - Provider changes, model selection, prompt style switching, and custom instructions update instantaneously in the DOM with 0ms latency without triggering full-screen iframe re-renders or white flashes.
 - **Review Navigator & Direct Item Jumping**:
   - Direct Jump-to selector with live status icons (`✓ Accepted`, `✕ Rejected`, `✎ Edited`, `● Ready`, `○ Pending`).
   - `⏮ Prev Pending` and `Next Pending ⏭` buttons to skip already reviewed chunks and jump directly to pending items.
@@ -47,13 +49,32 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   6. **Ollama / Local AI**: Seamless support for Ollama Cloud (`deepseek-v4-flash:cloud`, `kimi-k3:cloud`, `gpt-oss:120b:cloud`) or local offline models.
   7. **OpenAI**: Flagship `gpt-5.6-luna`, `gpt-5.6-terra`, `gpt-5.6-sol`, and `gpt-5.4`.
   8. **Anthropic Claude**: Gold-standard copyediting via `claude-haiku-4-5-20251001`, `claude-sonnet-5`, and `claude-opus-4-8`.
-- **6 Dynamic Aesthetic Themes with 1-Click Smooth Cycler**:
-  - 🌌 `Midnight Slate` (Default deep slate with electric blue accents)
-  - ❄️ `Nord Arctic` (Crisp arctic slate with ice-blue highlights)
-  - ✨ `Glassmorphism` (Modern frosted-glass translucency)
-  - 🌲 `Emerald Forest` (Deep botanical green with mint glow)
-  - 💜 `Cyber Violet` (Neon violet & indigo velvet)
-  - ☀️ `Clean Daylight` (High-contrast bright paper theme for daytime editing)
+- **12 Dynamic Aesthetic Themes (Balanced Light & Dark)**:
+  - *Light Modes*:
+    - ☀️ `Clean Daylight` (Modern crisp daylight palette)
+    - 📜 `Sepia Parchment` (Warm editorial paper & terracotta)
+    - 🌸 `Sakura Blossom` (Soft rose blush & deep crimson)
+    - 🍵 `Matcha Latte` (Soothing green tea slate & forest accents)
+    - 🧊 `Nord Frost` (Arctic ice blue & navy slate)
+  - *Dark Modes*:
+    - 🌌 `Midnight Slate` (Default deep slate with electric blue accents)
+    - ❄️ `Nord Arctic` (Crisp arctic slate with ice-blue highlights)
+    - ✨ `Glassmorphism` (Modern frosted-glass translucency)
+    - 🌲 `Emerald Forest` (Deep botanical green with mint glow)
+    - 💜 `Cyber Violet` (Neon violet & indigo velvet)
+    - ☕ `Espresso Obsidian` (Warm dark roasted espresso & amber)
+    - 🧛 `Dracula Neo` (Vampire dark slate with magenta & cyan)
+- **Assigned Note Tags in Header**:
+  - Automatically queries and displays note tags as clean pill badges (e.g. `#work #draft`) next to the note title in the header subtitle.
+- **Categorized Prompt Style Dropdown**:
+  - Replaced cluttered button stacks with a stylish `<select>` dropdown organized into clear categories:
+    - *Correction & Polish*: Fix Grammar & Spelling, Minimal Changes, Teacher & Coach.
+    - *Conciseness & Style*: Shorten & Make Concise, Remove Passive Voice, Omit Adverbs, Improve Flow & Rhythm.
+    - *Tone & Voice*: Professional & Business, Academic & Analytical, Add Subtle Humor.
+    - *Custom Guidance*: Custom Prompt Override.
+  - Live style guidance description badge directly below the selector.
+- **Sandboxed-Safe In-DOM Modal Dialog Architecture**:
+  - Bypasses iframe sandboxing restrictions (`Ignored call to 'prompt()'`) with responsive in-DOM modal dialogs for `+ Custom Prompt`, `Manual Edit`, `Re-Review Reasons`, `Reset Session`, and `Delete API Key`.
 - **Power Keyboard Shortcuts**:
   - `A`: Accept active suggestion
   - `R`: Reject suggestion / keep original
@@ -61,18 +82,6 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - `N` / `→`: Navigate to Next item
   - `P` / `←`: Navigate to Previous item
   - `T`: Cycle themes on the fly
-- **Pre-built Prompt Presets & Custom Instructions**:
-  - Fix Grammar & Spelling
-  - Minimal Changes (Preserve Voice)
-  - Teacher & Coach (Clarity & Flow)
-  - Shorten & Make Concise
-  - Remove Passive Voice
-  - Omit Unnecessary Adverbs
-  - Improve Flow & Rhythm
-  - Professional & Business Tone
-  - Academic & Analytical Tone
-  - Add Subtle Humor & Wit
-  - *Custom user prompts supported.*
 
 ---
 

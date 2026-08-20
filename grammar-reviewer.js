@@ -161,6 +161,7 @@ const plugin = {
               await app.setSetting("AI Provider", newProvider);
             }
           }
+          requiresReRender = false;
           break;
         }
 
@@ -177,6 +178,7 @@ const plugin = {
               await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }
           }
+          requiresReRender = false;
           break;
         }
 
@@ -185,18 +187,21 @@ const plugin = {
             session.promptPresetId = args[1];
             session.customPrompt = "";
           }
+          requiresReRender = false;
           break;
 
         case "setCustomPrompt":
           if (session) {
             session.customPrompt = args[1];
           }
+          requiresReRender = false;
           break;
 
         case "clearCustomPrompt":
           if (session) {
             session.customPrompt = "";
           }
+          requiresReRender = false;
           break;
 
         case "runReview":
