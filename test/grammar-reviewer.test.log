@@ -1,106 +1,112 @@
-PASS anp-23-grammar-reviewer/test/saveHandler.test.js
-  Save Handler — Happy Path
-    ✓ Directly overwrites source note with reconstructed content (24 ms)
-    ✓ Creates companion audit notes when explicitly enabled (6 ms)
-  Save Handler — Error Handling & Validation
-    ✓ Throws error when no active review session exists (9 ms)
-    ✓ Throws error when target note UUID is missing or empty (3 ms)
-    ✓ Propagates API failure message if replaceNoteContent fails (1 ms)
-
-PASS anp-23-grammar-reviewer/test/historyManager.test.js
-  History Manager — Happy Path
-    ✓ Generates structured JSON history note with markdown summary (19 ms)
-    ✓ Parses JSON embedded history notes accurately (1 ms)
-  History Manager — Edge Cases & Fallbacks
-    ✓ Handles fallback to human-readable markdown reports when JSON is absent (1 ms)
-    ✓ Deduplicates fallback records if JSON record for same note and timestamp exists (1 ms)
-    ✓ Returns empty array when notes list is empty or invalid (3 ms)
+PASS anp-23-grammar-reviewer/test/promptPresets.test.js
+  Prompt Presets — Happy Path
+    ✓ Builds standard system and user prompt with instruction (7 ms)
+    ✓ Retrieves existing prompt preset by ID (16 ms)
+    ✓ Falls back to grammar_spelling for unknown preset ID (1 ms)
+    ✓ Parses valid structured JSON AI response (1 ms)
+    ✓ Parses markdown-fenced JSON AI response (1 ms)
+    ✓ Parses python triple-quoted and unescaped multiline JSON AI responses (5 ms)
+    ✓ Gracefully falls back when model returns plain text instead of JSON (1 ms)
 
 PASS anp-23-grammar-reviewer/test/providers.test.js
   AI Provider Suite - Comprehensive Dummy API Tests for All 8 Providers
-    ✓ 1. OpenRouter Provider - Request Payload, Headers & Response Parsing (21 ms)
-    ✓ 2. Google Gemini Provider - Contents Payload & Candidates Parsing (4 ms)
-    ✓ 3. Groq Provider - Ultra-Fast OpenAI Format Request (3 ms)
-    ✓ 4. Mistral AI Provider - European API Format (5 ms)
+    ✓ 1. OpenRouter Provider - Request Payload, Headers & Response Parsing (27 ms)
+    ✓ 2. Google Gemini Provider - Contents Payload & Candidates Parsing (2 ms)
+    ✓ 3. Groq Provider - Ultra-Fast OpenAI Format Request (2 ms)
+    ✓ 4. Mistral AI Provider - European API Format (3 ms)
     ✓ 5. DeepSeek Direct Provider - Direct API V3/V4 Format (3 ms)
-    ✓ 6. Ollama Local / Cloud Provider - Localhost Endpoint & Authorization (2 ms)
-    ✓ 7. OpenAI Provider - GPT-5.6 / GPT-4o Format (1 ms)
+    ✓ 6. Ollama Local / Cloud Provider - Localhost Endpoint & Authorization (4 ms)
+    ✓ 7. OpenAI Provider - GPT-5.6 / GPT-4o Format (2 ms)
     ✓ 8. Anthropic Claude Provider - x-api-key Headers & Messages API (2 ms)
-    ✓ Error Handling - Throws descriptive error when provider API returns 401/500 (8 ms)
+    ✓ Error Handling - Throws descriptive error when provider API returns 401/500 (6 ms)
 
-PASS anp-23-grammar-reviewer/test/reviewSession.test.js
-  ReviewSession — Happy Path
-    ✓ Initializes items from text and computes review metrics (8 ms)
-    ✓ Accepts suggestions and tracks updated metrics (1 ms)
-    ✓ Rejects suggestions and keeps original text (2 ms)
-    ✓ Supports manual custom edits (2 ms)
-  ReviewSession — Edge Cases & Serialization
-    ✓ Serializes and deserializes session state accurately (2 ms)
-    ✓ Handles fromJSON with null or empty input gracefully (1 ms)
-    ✓ Calculates total additions and deletions in metrics (2 ms)
-  ReviewSession — Error Handling
-    ✓ Safely handles out-of-bounds item index calls without throwing (2 ms)
+PASS anp-23-grammar-reviewer/test/providerRegistry.test.js
+  Provider Registry — getProviderConfig
+    ✓ Extracts default config when no settings are set (6 ms)
+    ✓ Extracts per-provider API keys and custom model dictionary (3 ms)
+    ✓ Handles legacy plain string Custom AI Model setting gracefully (1 ms)
+    ✓ Resolves Ollama custom base URL properly
+  Provider Registry — createProviderInstance
+    ✓ Instantiates GeminiProvider correctly (2 ms)
+    ✓ Instantiates OpenRouterProvider by default (1 ms)
+    ✓ Instantiates OllamaProvider with local default base URL (1 ms)
+
+PASS anp-23-grammar-reviewer/test/saveHandler.test.js
+  Save Handler — Happy Path
+    ✓ Directly overwrites source note with reconstructed content (9 ms)
+    ✓ Creates companion audit notes when explicitly enabled (10 ms)
+  Save Handler — Error Handling & Validation
+    ✓ Throws error when no active review session exists (9 ms)
+    ✓ Throws error when target note UUID is missing or empty (1 ms)
+    ✓ Propagates API failure message if replaceNoteContent fails (1 ms)
+    ✓ Aborts save when external note modification is detected and user declines overwrite (1 ms)
+    ✓ Proceeds with save when external note modification is detected and user confirms overwrite (1 ms)
+
+PASS anp-23-grammar-reviewer/test/scenarioWorkflow.test.js
+  Scenario Tests — Real-World Workflows (ANP-23 Integrity Suite)
+    ✓ Scenario A: Preserves untouched sentences and exact paragraph structure when reviewing a middle sentence (14 ms)
+    ✓ Scenario B: Preserves markdown structures (headers, bold, lists, quotes, and code blocks) byte-accurately (4 ms)
+    ✓ Scenario C: Review All handles individual API failures gracefully and flags failed items (126 ms)
+    ✓ Scenario D: Cancelling Review All stops subsequent API calls immediately (6 ms)
+    ✓ Scenario E: Stale save guard blocks note overwrite when external edits exist and user declines (3 ms)
+    ✓ Scenario F: Switching granularity retokenizes original content without loss (1 ms)
+    ✓ Scenario G: Manual edit on pending item transitions to modified without losing custom text (2 ms)
+
+PASS anp-23-grammar-reviewer/test/reportGenerator.test.js
+  Report and History Generator
+    ✓ Creates human-readable changes log with proper tag and backlink (14 ms)
+    ✓ Serializes and restores ReviewSession accurately for persistent storage (3 ms)
 
 PASS anp-23-grammar-reviewer/test/diffViewComponent.test.js
-  DiffViewComponent — Rendering
-    ✓ Renders active diff card with side-by-side panes and action buttons (8 ms)
-    ✓ Renders empty state when item is null or undefined (1 ms)
-    ✓ Disables Next and Previous buttons appropriately at boundaries (2 ms)
+  DiffViewComponent — Rendering & State-Aware Actions
+    ✓ Renders suggestion_ready card with Accept, Reject, Edit, and Re-Review buttons (9 ms)
+    ✓ Renders pending item with Review This Item button (1 ms)
+    ✓ Renders accepted item with Undo control (1 ms)
+    ✓ Renders empty state when item is null or undefined
+    ✓ Disables Next and Previous buttons appropriately at boundaries
+
+PASS anp-23-grammar-reviewer/test/historyManager.test.js
+  History Manager — Happy Path
+    ✓ Generates structured JSON history note with markdown summary (8 ms)
+    ✓ Parses JSON embedded history notes accurately (3 ms)
+  History Manager — Edge Cases & Fallbacks
+    ✓ Handles fallback to human-readable markdown reports when JSON is absent (1 ms)
+    ✓ Deduplicates fallback records if JSON record for same note and timestamp exists (2 ms)
+    ✓ Returns empty array when notes list is empty or invalid (2 ms)
 
 PASS anp-23-grammar-reviewer/test/diffEngine.test.js
   Diff Engine — Happy Path
-    ✓ Detects word additions and deletions accurately (9 ms)
-    ✓ Tokenizes punctuation and whitespace runs separately (5 ms)
-    ✓ Produces correct token diff for simple insertion (1 ms)
+    ✓ Detects word additions and deletions accurately (6 ms)
+    ✓ Tokenizes punctuation and whitespace runs separately (2 ms)
+    ✓ Produces correct token diff for simple insertion (2 ms)
   Diff Engine — Edge Cases
     ✓ Handles identical text with no changes (1 ms)
-    ✓ Handles empty strings gracefully (1 ms)
-    ✓ Handles insertion from empty original text (1 ms)
-    ✓ Handles complete deletion to empty suggested text (2 ms)
+    ✓ Handles empty strings gracefully
+    ✓ Handles insertion from empty original text
+    ✓ Handles complete deletion to empty suggested text (1 ms)
     ✓ TokenizeWords handles null and undefined safely (1 ms)
   Diff Engine — Error Handling & Sanitization
-    ✓ Escapes dangerous HTML characters to prevent XSS (1 ms)
-    ✓ escapeHtml handles empty and null input without throwing (1 ms)
-  Diff Engine — Regression Tests
-    ✓ Maintains linear-time reconstruction order without inverted diff parts (1 ms)
-
-PASS anp-23-grammar-reviewer/test/promptPresets.test.js
-  Prompt Presets — Happy Path
-    ✓ Builds standard system and user prompt with instruction (6 ms)
-    ✓ Retrieves existing prompt preset by ID (2 ms)
-    ✓ Falls back to grammar_spelling for unknown preset ID (1 ms)
+    ✓ Escapes dangerous HTML characters to prevent XSS
+    ✓ escapeHtml handles empty and null input without throwing
+  Diff Engine — Changes Only Mode & List Extraction
+    ✓ Extracts paired changes and renders Changes Only HTML correctly (1 ms)
 
 PASS anp-23-grammar-reviewer/test/tokenizer.test.js
   Markdown Tokenizer — Happy Path
-    ✓ Tokenizes paragraphs while preserving codeblocks intact (6 ms)
-    ✓ Tokenizes sentences accurately without breaking abbreviations (3 ms)
+    ✓ Tokenizes paragraphs while preserving codeblocks intact (4 ms)
+    ✓ Tokenizes sentences accurately without breaking abbreviations (2 ms)
     ✓ Full note granularity returns single chunk (1 ms)
   Markdown Tokenizer — Edge Cases
     ✓ Handles null, undefined, and empty string input (2 ms)
-    ✓ Detects non-inspectable content like thematic breaks and whitespace (9 ms)
+    ✓ Detects non-inspectable content like thematic breaks and whitespace (1 ms)
     ✓ Protects numbers with decimal points during sentence splitting (1 ms)
   Markdown Tokenizer — Error Handling & Fallbacks
     ✓ Falls back to paragraph mode for unknown granularity mode
   Markdown Tokenizer — Regression Tests
-    ✓ CRLF line endings (\r\n) are cleanly normalized without leaving carriage returns (1 ms)
+    ✓ CRLF line endings (\r\n) are cleanly normalized without leaving carriage returns
 
-PASS anp-23-grammar-reviewer/test/reportGenerator.test.js
-  Report and History Generator
-    ✓ Creates human-readable changes log with proper tag and backlink (9 ms)
-    ✓ Serializes and restores ReviewSession accurately for persistent storage (3 ms)
-
-PASS anp-23-grammar-reviewer/test/providerRegistry.test.js
-  Provider Registry — getProviderConfig
-    ✓ Extracts default config when no settings are set (4 ms)
-    ✓ Extracts per-provider API keys and custom model dictionary (2 ms)
-    ✓ Handles legacy plain string Custom AI Model setting gracefully
-    ✓ Resolves Ollama custom base URL properly (1 ms)
-  Provider Registry — createProviderInstance
-    ✓ Instantiates GeminiProvider correctly (2 ms)
-    ✓ Instantiates OpenRouterProvider by default
-    ✓ Instantiates OllamaProvider with local default base URL (1 ms)
-
-Test Suites: 10 passed, 10 total
-Tests:       61 passed, 61 total
+Test Suites: 11 passed, 11 total
+Tests:       79 passed, 79 total
 Snapshots:   0 total
-Time:        2.7 s
+Time:        3.246 s
+Ran all test suites matching /anp-23-grammar-reviewer/i.

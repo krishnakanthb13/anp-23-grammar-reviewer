@@ -801,8 +801,12 @@ var ReviewSession = class _ReviewSession {
    * @returns {{
    *   total: number,
    *   reviewed: number,
+   *   decided: number,
    *   accepted: number,
+   *   modified: number,
    *   rejected: number,
+   *   suggestionReady: number,
+   *   errors: number,
    *   pending: number,
    *   percentComplete: number,
    *   totalAdditions: number,
@@ -812,9 +816,14 @@ var ReviewSession = class _ReviewSession {
   getMetrics() {
     const inspectable = this.items.filter((i) => i.isInspectable);
     const total = inspectable.length;
-    const reviewed = inspectable.filter((i) => i.status !== "pending" && i.status !== "suggestion_ready").length;
-    const accepted = inspectable.filter((i) => i.status === "accepted" || i.status === "modified").length;
+    const acceptedOnly = inspectable.filter((i) => i.status === "accepted").length;
+    const modified = inspectable.filter((i) => i.status === "modified").length;
     const rejected = inspectable.filter((i) => i.status === "rejected").length;
+    const errors = inspectable.filter((i) => i.status === "error").length;
+    const suggestionReady = inspectable.filter((i) => i.status === "suggestion_ready").length;
+    const reviewed = inspectable.filter((i) => ["suggestion_ready", "accepted", "rejected", "modified"].includes(i.status)).length;
+    const decided = acceptedOnly + modified + rejected;
+    const pending = inspectable.filter((i) => i.status === "pending" || i.status === "reviewing").length;
     let totalAdditions = 0;
     let totalDeletions = 0;
     for (const item of this.items) {
@@ -826,8 +835,12 @@ var ReviewSession = class _ReviewSession {
     return {
       total,
       reviewed,
-      accepted,
+      decided,
+      accepted: acceptedOnly + modified,
+      modified,
       rejected,
+      suggestionReady,
+      errors,
       pending: total - reviewed,
       percentComplete: total > 0 ? Math.round(reviewed / total * 100) : 100,
       totalAdditions,
@@ -1468,23 +1481,102 @@ async function launchReviewer(app, targetNoteUUID, forcePrompt = false) {
 // anp-23-grammar-reviewer/lib/engine/promptPresets.js
 function buildReviewPrompt({ instruction, targetText, context = "", granularity = "paragraph" }) {
   const systemPrompt = `You are a master copyeditor and high-school writing teacher.
-Your job is to rewrite and improve the user's provided markdown text according to the specific editing instruction.
+Your job is to rewrite and improve the user's provided markdown text according to the specific editing instruction, and provide educational commentary explaining your edits.
+
+OUTPUT FORMAT REQUIREMENTS:
+You MUST respond with a valid JSON object matching this exact schema:
+{
+  "rewritten": "The complete rewritten markdown text",
+  "category": "Grammar & Spelling | Clarity & Flow | Tone & Style | Conciseness | Punctuation",
+  "confidence": "high | medium | low",
+  "explanation": "A concise 1-2 sentence educational explanation of the improvements made"
+}
 
 STRICT EDITING RULES:
-1. Return ONLY the rewritten text. Do NOT include any intro, outro, preamble, conversational remarks, or markdown backticks enclosing the entire response.
-2. Preserve all Markdown formatting (headers #, bold **, italics *, links [], task lists [ ], bullets -) unless the edit explicitly targets that structure.
-3. If no improvements are necessary, return the exact original text verbatim.
-4. Maintain the author's core ideas, tone, and factual content while fulfilling the instruction.`;
+1. Preserve all Markdown formatting (headers #, bold **, italics *, links [], task lists [ ], bullets -) unless the edit explicitly targets that structure.
+2. If no improvements are necessary, return the exact original text in "rewritten", "No Changes Needed" in "category", and explain why the text is already effective.
+3. Maintain the author's core ideas, tone, and factual content while fulfilling the instruction.
+4. Output valid JSON ONLY. Use standard JSON double quotes (not python triple quotes). Escape any quotes or newlines inside strings.`;
   const userPrompt = `Editing Instruction:
 ${instruction}
 
-Text to review (${granularity}):
-"""
-${targetText}
-"""
+Context: ${context || "Standard Note"}
+Granularity: ${granularity}
 
-Rewritten version:`;
+Text to review:
+<<<INPUT_TEXT_START>>>
+${targetText}
+<<<INPUT_TEXT_END>>>`;
   return { systemPrompt, userPrompt };
+}
+function parseAiResponse(rawOutput, originalText = "") {
+  if (!rawOutput || typeof rawOutput !== "string") {
+    return {
+      rewritten: originalText,
+      category: "No Changes Needed",
+      confidence: "high",
+      explanation: "No response received from AI provider."
+    };
+  }
+  const trimmed = rawOutput.trim();
+  const jsonFenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const potentialJson = jsonFenceMatch ? jsonFenceMatch[1].trim() : trimmed;
+  if (potentialJson.startsWith("{") && potentialJson.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(potentialJson);
+      const rewritten = typeof parsed.rewritten === "string" ? parsed.rewritten : typeof parsed.suggestion === "string" ? parsed.suggestion : typeof parsed.revised_text === "string" ? parsed.revised_text : "";
+      if (rewritten !== void 0 && rewritten !== null) {
+        return {
+          rewritten: cleanAiText(rewritten),
+          category: parsed.category || "Grammar & Clarity",
+          confidence: (parsed.confidence || "high").toLowerCase(),
+          explanation: parsed.explanation || (parsed.summary || "")
+        };
+      }
+    } catch {
+    }
+  }
+  if (potentialJson.includes('"rewritten"') || potentialJson.includes('"suggestion"') || potentialJson.includes('"revised_text"') || potentialJson.includes('"output"')) {
+    const rewrittenVal = extractQuotedField(potentialJson, ["rewritten", "revised_text", "revisedText", "suggestion", "improved", "output", "text"]);
+    if (rewrittenVal !== null && rewrittenVal.length > 0) {
+      const categoryVal = extractQuotedField(potentialJson, ["category"]) || "Grammar & Clarity";
+      const confidenceVal = (extractQuotedField(potentialJson, ["confidence"]) || "high").toLowerCase();
+      const explanationVal = extractQuotedField(potentialJson, ["explanation", "reason", "rationale", "summary"]) || "";
+      return {
+        rewritten: cleanAiText(rewrittenVal),
+        category: categoryVal,
+        confidence: confidenceVal,
+        explanation: explanationVal
+      };
+    }
+  }
+  const cleaned = cleanAiText(trimmed);
+  return {
+    rewritten: cleaned,
+    category: "Grammar & Clarity",
+    confidence: "high",
+    explanation: ""
+  };
+}
+function extractQuotedField(source, fieldNames) {
+  const pattern = new RegExp(`"(?:${fieldNames.join("|")})"\\s*:\\s*("""|'''|"|'|\`)`, "i");
+  const match = source.match(pattern);
+  if (!match) return null;
+  const quote = match[1];
+  const startIdx = match.index + match[0].length;
+  const endIdx = source.indexOf(quote, startIdx);
+  if (endIdx === -1) {
+    return source.slice(startIdx).replace(/[\s\r\n}]+$/, "").trim();
+  }
+  return source.slice(startIdx, endIdx).trim();
+}
+function cleanAiText(text) {
+  let cleaned = text.trim();
+  if (cleaned.startsWith("```") && cleaned.endsWith("```")) {
+    cleaned = cleaned.replace(/^```[a-zA-Z]*\n?/, "").replace(/\n?```$/, "").trim();
+  }
+  cleaned = cleaned.replace(/^(?:Rewritten version|Revised text|Output):\s*/i, "").trim();
+  return cleaned;
 }
 function getPromptPreset(id) {
   const found = PREBUILT_PROMPTS.find((p) => p.id === id);
@@ -1531,7 +1623,12 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
       systemPrompt,
       model: session.model
     });
-    session.setSuggestion(targetIdx, aiOutput);
+    const parsed = parseAiResponse(aiOutput, item.original);
+    session.setSuggestion(targetIdx, parsed.rewritten, {
+      category: parsed.category,
+      confidence: parsed.confidence,
+      explanation: parsed.explanation
+    });
     return session;
   } catch (err) {
     item.status = prevStatus === "pending" ? "error" : prevStatus;
@@ -1540,8 +1637,13 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
 }
 async function handleReviewAll(app) {
   const session = getActiveSession();
-  if (!session) return;
+  if (!session) {
+    return { reviewedCount: 0, failedCount: 0, failedIndices: [], cancelled: false };
+  }
   isReviewAllCancelled = false;
+  let reviewedCount = 0;
+  let failedCount = 0;
+  const failedIndices = [];
   for (let i = 0; i < session.items.length; i++) {
     if (isReviewAllCancelled) {
       console.log("[GrammarReviewer] Review All was cancelled by user.");
@@ -1551,11 +1653,20 @@ async function handleReviewAll(app) {
     if (item.isInspectable && (item.status === "pending" || item.status === "error")) {
       try {
         await handleRunReview(app, i);
+        reviewedCount++;
       } catch (err) {
+        failedCount++;
+        failedIndices.push(i);
         console.warn(`[GrammarReviewer] Error reviewing item #${i}:`, err);
       }
     }
   }
+  return {
+    reviewedCount,
+    failedCount,
+    failedIndices,
+    cancelled: isReviewAllCancelled
+  };
 }
 function handleSetGranularity(app, newMode) {
   const session = getActiveSession();
@@ -1584,6 +1695,7 @@ function generateChangesReport({ session, sourceNoteTitle, sourceNoteUUID, final
   const titleName = sourceNoteTitle || "Untitled Note";
   const sourceLink = sourceNoteUUID ? `[${titleName}](https://www.amplenote.com/notes/${sourceNoteUUID})` : titleName;
   const promptName = session.customPrompt ? `Custom: "${session.customPrompt}"` : `Preset: ${session.promptPresetId.replace(/_/g, " ")}`;
+  const fence = getSafeMarkdownFence(session.originalContent || "");
   const md = `# \u{1F4DD} Grammar Review Changes: ${titleName}
 
 > **Source Note:** ${sourceLink}  
@@ -1611,9 +1723,9 @@ ${finalContent}
 <details>
 <summary>Click to view original text before review</summary>
 
-\`\`\`markdown
+${fence}markdown
 ${session.originalContent}
-\`\`\`
+${fence}
 
 </details>
 
@@ -1649,6 +1761,15 @@ function generateItemChangesTable(items) {
 `;
   }).join("\n");
   return changeBlocks;
+}
+function getSafeMarkdownFence(content = "") {
+  if (typeof content !== "string") return "```";
+  const matches = content.match(/`{3,}/g) || [];
+  let maxLen = 2;
+  for (const m of matches) {
+    if (m.length > maxLen) maxLen = m.length;
+  }
+  return "`".repeat(maxLen + 1);
 }
 
 // anp-23-grammar-reviewer/lib/data/historyManager.js
@@ -1690,6 +1811,8 @@ function generateHistoryRecord({ session, sourceNoteTitle, sourceNoteUUID, final
     originalContent: session.originalContent,
     finalContent
   };
+  const jsonPayload = JSON.stringify(record, null, 2);
+  const fence = getSafeMarkdownFence2(jsonPayload);
   const markdownContent = `# \u{1F4DC} Grammar Review History: ${titleName}
 
 > **Source Note:** ${sourceLink}  
@@ -1701,9 +1824,9 @@ function generateHistoryRecord({ session, sourceNoteTitle, sourceNoteUUID, final
 
 ## \u{1F4BE} Audit Log Payload
 
-\`\`\`json
-${JSON.stringify(record, null, 2)}
-\`\`\`
+${fence}json
+${jsonPayload}
+${fence}
 `;
   return {
     name: `Grammar History: ${titleName} (${dateStr})`,
@@ -1770,6 +1893,15 @@ function parseHistoryNotes(notes = []) {
   }
   return finalRecords.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 }
+function getSafeMarkdownFence2(content = "") {
+  if (typeof content !== "string") return "```";
+  const matches = content.match(/`{3,}/g) || [];
+  let maxLen = 2;
+  for (const m of matches) {
+    if (m.length > maxLen) maxLen = m.length;
+  }
+  return "`".repeat(maxLen + 1);
+}
 
 // anp-23-grammar-reviewer/lib/features/saveHandler.js
 async function handleSaveAndCommit(app, createAuditNotes = false) {
@@ -1785,19 +1917,28 @@ async function handleSaveAndCommit(app, createAuditNotes = false) {
   if (typeof app.getNoteContent === "function") {
     try {
       const currentContent = await app.getNoteContent({ uuid: noteUUID });
-      if (currentContent && session.originalContent && currentContent.replace(/\r\n/g, "\n").trim() !== session.originalContent.replace(/\r\n/g, "\n").trim()) {
-        const proceed = await app.prompt("Warning: Note Modified Externally", {
-          inputs: [
-            {
-              label: "The source note was modified outside the reviewer. Overwrite with reviewed version?",
-              type: "checkbox",
-              value: true
+      if (currentContent && session.originalContent) {
+        const normCurrent = currentContent.replace(/\r\n/g, "\n").trim();
+        const normOriginal = session.originalContent.replace(/\r\n/g, "\n").trim();
+        if (normCurrent !== normOriginal && typeof app.prompt === "function") {
+          try {
+            const proceed = await app.prompt("Warning: Note Modified Externally", {
+              inputs: [
+                {
+                  label: "The source note was modified outside the reviewer. Overwrite with reviewed version?",
+                  type: "checkbox",
+                  value: true
+                }
+              ]
+            });
+            if (proceed !== null && proceed !== void 0) {
+              const isConfirmed = typeof proceed === "object" ? Boolean(proceed["The source note was modified outside the reviewer. Overwrite with reviewed version?"] ?? proceed[0]) : Boolean(proceed);
+              if (!isConfirmed) {
+                return { success: false, cancelled: true };
+              }
             }
-          ]
-        });
-        const isConfirmed = typeof proceed === "object" ? Boolean(proceed["The source note was modified outside the reviewer. Overwrite with reviewed version?"] ?? proceed[0]) : Boolean(proceed);
-        if (!isConfirmed) {
-          return { success: false, cancelled: true };
+          } catch {
+          }
         }
       }
     } catch (e) {
@@ -2306,7 +2447,31 @@ body {
   align-items: center;
   gap: 8px;
   margin-top: 2px;
+  flex-wrap: wrap;
 }
+
+.gr-note-link-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  transition: all 0.15s ease;
+}
+
+.gr-note-link-btn:hover {
+  background: var(--bg-card);
+  border-color: var(--border-active);
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
 
 .gr-header-actions {
   display: flex;
@@ -2975,31 +3140,101 @@ kbd {
 
 .gr-op-banner {
   position: fixed;
-  top: 8px;
+  top: 14px;
   left: 50%;
-  transform: translateX(-50%) translateY(-120%);
-  background: var(--bg-secondary);
+  transform: translateX(-50%) translateY(-140%) scale(0.95);
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-active);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45), 0 0 24px rgba(59, 130, 246, 0.25);
   color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 8px 18px;
-  border-radius: var(--radius-md);
+  padding: 10px 18px;
+  border-radius: var(--radius-lg);
   z-index: 9998;
   display: flex;
   align-items: center;
   gap: 16px;
   opacity: 0;
   pointer-events: none;
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+  min-width: 320px;
+  max-width: 520px;
 }
 
 .gr-op-banner.active {
-  transform: translateX(-50%) translateY(0);
+  transform: translateX(-50%) translateY(0) scale(1);
   opacity: 1;
   pointer-events: auto;
 }
+
+.gr-op-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+
+.gr-op-banner-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2.5px solid rgba(59, 130, 246, 0.25);
+  border-top-color: var(--accent-primary);
+  border-right-color: #a855f7;
+  border-radius: 50%;
+  animation: grSpin 0.75s linear infinite;
+  flex-shrink: 0;
+}
+
+.gr-op-banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.gr-op-banner-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.gr-op-banner-subtext {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gr-op-banner-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--accent-danger-bg);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.gr-op-banner-cancel:hover {
+  background: var(--accent-danger);
+  color: #ffffff;
+  border-color: var(--accent-danger);
+  transform: translateY(-1px);
+}
+
 
 /* Status Pills */
 .gr-status-pill {
@@ -3925,6 +4160,9 @@ function renderStateAwareActionButtons(item, index, canUndo) {
   if (status === "modified") {
     return `
       <span class="gr-status-pill modified">\u270E Manually Edited</span>
+      <button class="gr-btn btn-success" onclick="sendAction('acceptItem', ${index})" title="Accept this manual edit as final">
+        \u2713 Accept Edit
+      </button>
       ${canUndo ? `
         <button class="gr-btn btn-warning" onclick="sendAction('undoItem', ${index})" title="Discard manual edit">
           \u21A9 Discard Edit
@@ -3934,13 +4172,24 @@ function renderStateAwareActionButtons(item, index, canUndo) {
         \u270F\uFE0F Re-Edit
       </button>
       <button class="gr-btn btn-secondary" onclick="openReReviewDialog(${index})">
-        \u{1F504} Re-Review
+        \u{1F504} Review My Edit
+      </button>
+    `;
+  }
+  if (status === "error") {
+    return `
+      <span class="gr-status-pill danger">\u26A0\uFE0F Review Failed</span>
+      <button class="gr-btn btn-primary" onclick="sendAction('runReview', ${index})">
+        \u26A0\uFE0F Retry Review
+      </button>
+      <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+        \u270F\uFE0F Manual Edit
       </button>
     `;
   }
   return `
     <button class="gr-btn btn-primary" onclick="sendAction('runReview', ${index})">
-      \u26A0\uFE0F Retry Review
+      \u26A1 Review This Item
     </button>
     <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
       \u270F\uFE0F Manual Edit
@@ -3953,10 +4202,14 @@ function escapeDataAttr(htmlStr) {
 }
 
 // anp-23-grammar-reviewer/lib/ui/dashboardTemplate.js
+function safeJsonEmbed(obj) {
+  if (obj === null || obj === void 0) return "null";
+  return JSON.stringify(obj).replace(/</g, "\\u003c").replace(/>/g, "\\u003e").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+}
 function buildDashboardTemplate({ session, config, historyRecords = [], activeTab = "review", activeTheme = "midnight" }) {
   const metrics = session ? session.getMetrics() : { total: 0, reviewed: 0, accepted: 0, rejected: 0, percentComplete: 0, pending: 0 };
   const currentItem = session?.items?.[session.currentIndex] || null;
-  const serializedSession = session ? JSON.stringify(session.toJSON()) : "null";
+  const serializedSession = safeJsonEmbed(session ? session.toJSON() : null);
   return `
 <!DOCTYPE html>
 <html lang="en" data-theme="${escapeHtml(activeTheme)}">
@@ -3980,26 +4233,32 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
           <button class="gr-modal-close" onclick="closeAppModal()" title="Close">\u2715</button>
         </div>
       </div>
-      <div id="gr-modal-body" class="gr-modal-body">
+      <div class="gr-modal-body">
         <p id="gr-modal-message" class="gr-modal-message"></p>
         <div id="gr-modal-input-container"></div>
       </div>
       <div class="gr-modal-footer">
-        <button id="gr-modal-btn-cancel" class="gr-btn btn-secondary" onclick="closeAppModal()">Cancel</button>
+        <button class="gr-btn btn-secondary" onclick="closeAppModal()">Cancel</button>
         <button id="gr-modal-btn-confirm" class="gr-btn btn-primary">Confirm</button>
       </div>
     </div>
   </div>
 
-  <!-- Global Top Operation Progress Bar & Live Banner -->
+  <!-- Top Progress Loading Bar -->
   <div id="top-loader" class="gr-top-loader"><div class="gr-top-loader-bar"></div></div>
+
+  <!-- Global Operation Notification Banner -->
   <div id="op-banner" class="gr-op-banner">
-    <div style="display: flex; align-items: center; gap: 8px;">
-      <span>\u26A1</span>
-      <span id="op-banner-text">AI is reviewing your writing...</span>
+    <div class="gr-op-banner-left">
+      <div class="gr-op-banner-spinner"></div>
+      <div class="gr-op-banner-info">
+        <span id="op-banner-text" class="gr-op-banner-text">AI is reviewing your note...</span>
+        <span id="op-banner-subtext" class="gr-op-banner-subtext">Polishing prose & generating insights...</span>
+      </div>
     </div>
-    <button class="gr-btn btn-danger btn-sm" onclick="cancelActiveOperation()">Stop Review</button>
+    <button class="gr-op-banner-cancel" onclick="cancelActiveOperation()" title="Stop ongoing review">\u2715 Stop</button>
   </div>
+
 
   <div class="gr-container">
     
@@ -4009,8 +4268,12 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         <div class="gr-logo">\u{1F9D1}\u200D\u{1F3EB}</div>
         <div>
           <h1 class="gr-title">Grammar & Style Reviewer</h1>
-          <div class="gr-subtitle" style="display: flex; align-items: center; gap: 8px; margin-top: 2px; flex-wrap: wrap;">
-            <span>Note: <strong>${escapeHtml(session?.noteTitle || "No Note Selected")}</strong></span>
+          <div class="gr-subtitle">
+            <button class="gr-note-link-btn" onclick="handleOpenNote()" title="Click to open this note in Amplenote (\u2197)">
+              <span>\u{1F4DD}</span>
+              <strong>${escapeHtml(session?.noteTitle || "No Note Selected")}</strong>
+              <span style="font-size: 11px; opacity: 0.75;">\u2197</span>
+            </button>
             ${session?.noteTags && session.noteTags.length > 0 ? `
               <div style="display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap;">
                 ${session.noteTags.map((t) => `<span class="gr-tag-pill">#${escapeHtml(String(t).replace(/^#/, ""))}</span>`).join("")}
@@ -4029,10 +4292,16 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       </div>
 
       <div class="gr-header-actions">
+        <!-- Open Note Button -->
+        <button class="gr-btn btn-secondary" onclick="handleOpenNote()" title="Open and view note in Amplenote (\u2197)" ${!session ? "disabled" : ""}>
+          <span>\u2197</span>
+          <span class="gr-hide-mobile">Open Note</span>
+        </button>
+
         <!-- 1-Click Smooth Theme Cycler -->
         <button class="gr-theme-btn" id="theme-cycler-btn" onclick="cycleTheme()" title="Click to cycle themes (or press T)">
-          <span id="theme-icon">\u{1F3A8}</span>
-          <span id="theme-name">Theme</span>
+          <span id="theme-icon">\u{1F30C}</span>
+          <span id="theme-name">Midnight Slate</span>
         </button>
 
         <!-- Instant Client-Side Nav Tabs -->
@@ -4044,12 +4313,14 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       </div>
     </header>
 
-    <!-- Tab 1: Reviewer Workspace -->
+
+
+    <!-- Tab 1: Review Workspace -->
     <div id="tab-view-review" class="gr-tab-view ${activeTab === "review" ? "active" : ""}">
       ${renderReviewWorkspace(session, config, metrics, currentItem)}
     </div>
 
-    <!-- Tab 2: History Logs Workspace -->
+    <!-- Tab 2: History Workspace -->
     <div id="tab-view-history" class="gr-tab-view ${activeTab === "history" ? "active" : ""}">
       ${renderHistoryWorkspace(historyRecords)}
     </div>
@@ -4062,10 +4333,10 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
   </div>
 
   <script>
-    const THEMES = ${JSON.stringify(THEMES)};
-    const MODEL_CATALOG = ${JSON.stringify(MODEL_CATALOG)};
-    const PROVIDER_DOCS = ${JSON.stringify(PROVIDER_DOCS)};
-    const RE_REVIEW_REASONS = ${JSON.stringify(RE_REVIEW_REASONS)};
+    const THEMES = ${safeJsonEmbed(THEMES)};
+    const MODEL_CATALOG = ${safeJsonEmbed(MODEL_CATALOG)};
+    const PROVIDER_DOCS = ${safeJsonEmbed(PROVIDER_DOCS)};
+    const RE_REVIEW_REASONS = ${safeJsonEmbed(RE_REVIEW_REASONS)};
     const STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_SESSION_STATE";
     const THEME_STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_ACTIVE_THEME";
     const TAB_STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_ACTIVE_TAB";
@@ -4119,17 +4390,26 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     } catch (e) {}
 
     // Top Operation Loader state management
-    function setTopLoading(isLoading, label = "AI is reviewing your note...") {
+    function setTopLoading(isLoading, label = "AI is reviewing your note...", subtext = "") {
       const loader = document.getElementById("top-loader");
       const banner = document.getElementById("op-banner");
       const bannerText = document.getElementById("op-banner-text");
+      const bannerSubtext = document.getElementById("op-banner-subtext");
 
       if (loader) loader.classList.toggle("active", isLoading);
       if (banner) banner.classList.toggle("active", isLoading);
       if (bannerText && label) bannerText.innerText = label;
+      if (bannerSubtext) {
+        bannerSubtext.innerText = subtext || (isLoading ? "Polishing prose & generating insights..." : "");
+        bannerSubtext.style.display = bannerSubtext.innerText ? "block" : "none";
+      }
     }
 
     function cancelActiveOperation() {
+      const bannerText = document.getElementById("op-banner-text");
+      const bannerSubtext = document.getElementById("op-banner-subtext");
+      if (bannerText) bannerText.innerText = "Stopping review...";
+      if (bannerSubtext) bannerSubtext.innerText = "Halting AI requests...";
       setTopLoading(false);
       sendAction("cancelReviewAll");
     }
@@ -4225,7 +4505,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       if (!backdrop) return;
 
       titleElem.innerText = title;
-      msgElem.innerText = message;
+      msgElem.innerHTML = message;
       msgElem.style.display = "block";
       if (inputContainer) inputContainer.innerHTML = "";
 
@@ -4331,6 +4611,26 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       const activeBtn = document.querySelector(".gr-segment-btn.active");
       const currentMode = activeBtn?.id?.replace("granularity-btn-", "") || "";
       if (currentMode === mode) return;
+
+      const hasDecidedWork = serverSession && serverSession.items && serverSession.items.some(i => i.status === "accepted" || i.status === "modified" || i.status === "rejected");
+      if (hasDecidedWork) {
+        const accepted = serverSession.items.filter(i => i.status === "accepted").length;
+        const rejected = serverSession.items.filter(i => i.status === "rejected").length;
+        const modified = serverSession.items.filter(i => i.status === "modified").length;
+        showAppConfirm({
+          title: "Change Review Granularity?",
+          message: "Changing granularity will rebuild review chunks and reset progress.<br><br>Current progress:<br>\u2022 " + accepted + " accepted<br>\u2022 " + rejected + " rejected<br>\u2022 " + modified + " edited<br><br>Proceed and start new review?",
+          confirmLabel: "Start New Review",
+          isDanger: true,
+          onConfirm: () => {
+            document.querySelectorAll(".gr-segmented-control .gr-segment-btn").forEach(btn => {
+              btn.classList.toggle("active", btn.id === "granularity-btn-" + mode);
+            });
+            sendAction("setGranularity", mode);
+          }
+        });
+        return;
+      }
 
       document.querySelectorAll(".gr-segmented-control .gr-segment-btn").forEach(btn => {
         btn.classList.toggle("active", btn.id === "granularity-btn-" + mode);
@@ -4440,8 +4740,20 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       });
     }
 
+    const DIFF_VIEW_STORAGE_KEY = "ANP_GRAMMAR_DIFF_VIEW_MODE";
+    let activeDiffMode = localStorage.getItem(DIFF_VIEW_STORAGE_KEY) || "clean";
+
     // 4 Diff View Modes (Clean Prose, Inline Diff, Side-by-Side, Changes Only)
     function setDiffViewMode(index, mode) {
+      if (mode) {
+        activeDiffMode = mode;
+        try {
+          localStorage.setItem(DIFF_VIEW_STORAGE_KEY, mode);
+        } catch (e) {}
+      } else {
+        mode = activeDiffMode;
+      }
+
       const panesWrapper = document.getElementById("panes-wrapper-" + index);
       const changesView = document.getElementById("changes-only-view-" + index);
       const originalPaneWrapper = document.getElementById("original-pane-wrapper-" + index);
@@ -4520,12 +4832,37 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       if (settingsToggle) settingsToggle.checked = enabled;
     }
 
-    function handleSaveButtonClick() {
-      sendAction("saveAndCommit", isAuditNotesEnabled());
+    async function handleSaveButtonClick() {
+      setTopLoading(true, "Saving changes to note...", "Updating note content in Amplenote");
+      const res = await sendAction("saveAndCommit", isAuditNotesEnabled());
+      setTopLoading(false);
+      if (res && res.success) {
+        showAppConfirm({
+          title: "Changes Saved Successfully!",
+          message: "All accepted and modified prose rewrites have been saved to <strong>" + (serverSession?.noteTitle || "your note") + "</strong>.<br><br>Would you like to open and view the note in Amplenote now?",
+          confirmLabel: "Open Note in Amplenote \u2197",
+          onConfirm: () => {
+            handleOpenNote();
+          }
+        });
+      } else if (res && res.cancelled) {
+        showAppConfirm({
+          title: "Save Cancelled",
+          message: "The note was modified externally. Save was cancelled to prevent accidental overwrites.",
+          confirmLabel: "OK"
+        });
+      }
+    }
+
+    function handleOpenNote() {
+      if (serverSession && serverSession.noteUUID) {
+        sendAction("openNote", serverSession.noteUUID);
+      }
     }
 
     // Initialize audit checkbox state
     syncAuditCheckboxes();
+
 
     // Keyboard Shortcuts (A Accept, R Reject, U Undo, N/P Nav, T Theme)
     window.addEventListener("keydown", (e) => {
@@ -4715,8 +5052,9 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     // Initialize Scroll Sync
     initScrollSync();
 
-    const ALL_SAVED_KEYS = ${JSON.stringify(config.allKeys || {})};
-    const ALL_SAVED_MODELS = ${JSON.stringify(config.allModels || {})};
+    const ALL_SAVED_KEYS = ${safeJsonEmbed(config.allKeys || {})};
+    const ALL_SAVED_MODELS = ${safeJsonEmbed(config.allModels || {})};
+
 
     function formatMaskedKey(key) {
       if (!key || key.trim().length === 0) return "";
@@ -5275,9 +5613,13 @@ var plugin = {
         case "runReview":
           await handleRunReview(app, typeof args[1] === "number" ? args[1] : -1, args[2] || "");
           break;
-        case "reviewAll":
-          await handleReviewAll(app);
+        case "reviewAll": {
+          const res = await handleReviewAll(app);
+          if (res && res.failedCount > 0) {
+            await app.alert(`Review All completed: ${res.reviewedCount} chunks reviewed, ${res.failedCount} item(s) failed.`);
+          }
           break;
+        }
         case "cancelReviewAll":
           cancelReviewAll();
           requiresReRender = false;
@@ -5332,32 +5674,55 @@ var plugin = {
           break;
         case "saveAndCommit":
           if (session) {
-            const auditEnabled = Boolean(args[1]);
-            const confirmSave = await app.prompt("Commit Grammar Review Rewrites?", {
-              inputs: [
-                {
-                  label: "Also create extra changes & history report notes (-reports/-grammar/*)? (Optional \u2014 Amplenote natively captures note revision history)",
-                  type: "checkbox",
-                  value: auditEnabled
-                }
-              ]
-            });
-            if (confirmSave !== null && confirmSave !== false) {
-              const shouldCreateNotes = typeof confirmSave === "object" ? Boolean(confirmSave["Also create extra changes & history report notes (-reports/-grammar/*)? (Optional \u2014 Amplenote natively captures note revision history)"] ?? confirmSave[0]) : Boolean(confirmSave);
+            const shouldCreateNotes = Boolean(args[1]);
+            try {
               const res = await handleSaveAndCommit(app, shouldCreateNotes);
-              if (shouldCreateNotes && res.changesNoteUUID) {
-                await app.alert(`Changes saved to source note!
-
-Audit report created: ${res.changesNoteUUID}`);
-              } else {
-                await app.alert("Changes successfully saved to source note!");
+              if (res && res.cancelled) {
+                return { success: false, cancelled: true, message: "Save cancelled: Source note was modified externally." };
               }
+              if (res && res.success) {
+                if (typeof app.alert === "function") {
+                  try {
+                    await app.alert(shouldCreateNotes && res.changesNoteUUID ? `Changes successfully saved to note!
+
+Companion report created: ${res.changesNoteUUID}` : `Changes successfully saved to ${session.noteTitle || "note"}!`);
+                  } catch {
+                  }
+                }
+                return {
+                  success: true,
+                  noteUUID: session.noteUUID,
+                  noteTitle: session.noteTitle,
+                  changesNoteUUID: res.changesNoteUUID,
+                  historyNoteUUID: res.historyNoteUUID
+                };
+              }
+            } catch (err) {
+              console.error("[GrammarReviewer] saveAndCommit failed:", err);
+              if (typeof app.alert === "function") {
+                try {
+                  await app.alert(`Failed to save note: ${err?.message || err}`);
+                } catch {
+                }
+              }
+              return { success: false, error: err?.message || String(err) };
             }
           }
           break;
         case "openNote":
-          if (args[1]) {
-            await app.navigate(`https://www.amplenote.com/notes/${args[1]}`);
+          {
+            const targetUUID = args[1] || session?.noteUUID;
+            if (targetUUID) {
+              try {
+                if (typeof app.openNote === "function") {
+                  await app.openNote(targetUUID);
+                } else if (typeof app.navigate === "function") {
+                  await app.navigate(`https://www.amplenote.com/notes/${targetUUID}`);
+                }
+              } catch (e) {
+                console.warn("[GrammarReviewer] openNote error:", e);
+              }
+            }
           }
           requiresReRender = false;
           break;

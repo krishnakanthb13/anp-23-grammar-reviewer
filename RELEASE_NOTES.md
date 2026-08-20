@@ -1,5 +1,19 @@
 # Release Notes: Amplenote Grammar & Style Reviewer
 
+## v0.0.10 (2026-08-20)
+
+### 🛡️ Production Integrity, Real-World Hardening & Scenario Testing
+- **Stale Note Overwrite Guard Verification**: Re-verified and sealed the fresh `app.getNoteContent()` comparison immediately prior to `app.replaceNoteContent()`. If external note edits are detected, an in-DOM prompt lets the user choose whether to overwrite or cleanly cancel without data loss.
+- **End-to-End Structured AI Teacher Insight**: Updated AI system prompt contracts to request structured JSON responses with `rewritten`, `category`, `confidence`, and educational `explanation`. Added `parseAiResponse()` with markdown code-fence parsing and graceful plain-text fallback.
+- **Real Cooperative Review All Cancellation**: Added client-side `cancelActiveOperation()` and in-loop cancellation checks in `handleReviewAll()`, stopping background requests immediately when "Stop Review" is clicked.
+- **Review All Failure Transparency**: Track and expose individual chunk failures in `handleReviewAll()` results, flagging failed items with `⚠️ Review Failed` and providing a 1-click `⚠️ Retry Review` button.
+- **Protected Granularity Switching**: Added a confirmation dialog to `handleGranularityChange()` whenever there are accepted, modified, or rejected decisions, preventing accidental loss of in-progress review maps.
+- **Explicit Manual Edit Semantics**: Differentiated manual edits with clear action buttons (`✓ Accept Edit`, `↩ Discard Edit`, `✏️ Re-Edit`, `🔄 Review My Edit`).
+- **Diff View Mode Persistence**: Saved user's active diff mode preference (`✨ Clean Prose`, `🔀 Inline Diff`, `👥 Side-by-Side`, `📋 Changes Only`) in `localStorage` under `ANP_GRAMMAR_DIFF_VIEW_MODE`.
+- **Dynamic Markdown Code Fence Escaping**: Implemented `getSafeMarkdownFence()` in `reportGenerator.js` and `historyManager.js` to ensure Markdown reports and JSON payloads with embedded backticks never break code fences.
+- **Comprehensive Scenario Integration Test Suite**: Added `test/scenarioWorkflow.test.js` covering real-world workflows (Scenarios A–G: sentence preservation, markdown syntax preservation, partial API failure resilience, mid-stream cancellation, stale overwrite protection, granularity switching, and manual edit flows).
+- **Test Suite Expansion**: 78 tests across 11 test suites passing with 100% success.
+
 ## v0.0.9 (2026-08-20)
 
 ### 🚀 Major Enhancements & Flicker Elimination

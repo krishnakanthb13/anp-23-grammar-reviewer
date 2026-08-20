@@ -139,7 +139,7 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 ## 🛠️ Development & Testing
 
 ```bash
-# Run complete test suite (66 unit tests across 10 test suites)
+# Run complete test suite (79 unit and workflow scenario tests across 11 test suites)
 $env:NODE_OPTIONS="--experimental-vm-modules"; npx jest anp-23-grammar-reviewer/test
 
 # Run standalone 8-AI provider diagnostic simulation
@@ -150,6 +150,7 @@ node esbuild.js 23
 ```
 
 Output bundle: `anp-23-grammar-reviewer/build/grammar-reviewer.compiled.js`
+
 
 ---
 

@@ -102,4 +102,49 @@ describe("Save Handler — Error Handling & Validation", () => {
       "Failed to update note (uuid-fail): Network timeout"
     );
   });
+
+  test("Aborts save when external note modification is detected and user declines overwrite", async () => {
+    const session = new ReviewSession({
+      noteUUID: "target-note-uuid",
+      originalContent: "Original content baseline."
+    });
+    session.setSuggestion(0, "Polished content.");
+    session.accept(0);
+    setActiveSession(session);
+
+    const mockApp = {
+      getNoteContent: jest.fn().mockResolvedValue("Someone edited this externally!"),
+      prompt: jest.fn().mockResolvedValue(false), // User declines overwrite
+      replaceNoteContent: jest.fn()
+    };
+
+    const res = await handleSaveAndCommit(mockApp);
+    expect(res.success).toBe(false);
+    expect(res.cancelled).toBe(true);
+    expect(mockApp.replaceNoteContent).not.toHaveBeenCalled();
+  });
+
+  test("Proceeds with save when external note modification is detected and user confirms overwrite", async () => {
+    const session = new ReviewSession({
+      noteUUID: "target-note-uuid",
+      originalContent: "Original content baseline."
+    });
+    session.setSuggestion(0, "Polished content.");
+    session.accept(0);
+    setActiveSession(session);
+
+    const mockApp = {
+      getNoteContent: jest.fn().mockResolvedValue("Someone edited this externally!"),
+      prompt: jest.fn().mockResolvedValue(true), // User confirms overwrite
+      replaceNoteContent: jest.fn().mockResolvedValue(true)
+    };
+
+    const res = await handleSaveAndCommit(mockApp);
+    expect(res.success).toBe(true);
+    expect(mockApp.replaceNoteContent).toHaveBeenCalledWith(
+      { uuid: "target-note-uuid" },
+      "Polished content."
+    );
+  });
 });
+

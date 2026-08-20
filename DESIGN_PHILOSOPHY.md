@@ -45,8 +45,6 @@ Avoid polluting the user's workspace with unnecessary files:
 Users should never be locked into a single proprietary API:
 - **Free-Tier Friendly**: Out-of-the-box support for OpenRouter's free pool, Gemini Flash, Groq's fast tier, and local offline Ollama models.
 - **Frontier Quality**: Direct API key integration for Claude Sonnet 5, DeepSeek V4 Pro, and GPT-5.6.
-- **Per-Provider Model Memory (Zero Schema Pollution)**: Custom models and selections are stored independently for each provider via clean JSON formatting within existing settings.
-
 ## 9. Sandboxed-Safe UI Sovereignty
 Amplenote embeds run in sandboxed iframes without `allow-modals`:
 - **Zero Dead-Click Guarantee**: Standard web APIs like `window.prompt()` and `window.confirm()` fail silently in sandboxed environments. The plugin maintains sovereign in-DOM modal dialogs (`showAppPrompt`, `showAppConfirm`, `showAppChoice`) that work seamlessly across desktop, web, and mobile clients without platform friction.
@@ -55,5 +53,13 @@ Amplenote embeds run in sandboxed iframes without `allow-modals`:
 Writing and copyediting happen across diverse lighting conditions:
 - **Balanced Light & Dark Themes**: Rather than dark-mode-only bias, 12 distinct palettes cater to daylight writing (Clean Daylight, Sepia Parchment, Sakura Blossom, Matcha Latte, Nord Frost) and nocturnal focus (Midnight Slate, Nord Arctic, Glassmorphism, Emerald Forest, Cyber Violet, Espresso Obsidian, Dracula Neo).
 - **Categorized Style Guidance**: Grouping editing styles by intent (Correction & Polish, Conciseness & Style, Tone & Voice) lets writers quickly choose their desired editorial voice.
+
+## 11. Integrity-First Asynchronous Resilience & Failure Transparency
+Background and multi-item operations must maintain strict integrity:
+- **Cooperative Cancellation**: When a user clicks `Stop Review`, running loops must immediately halt further background API requests rather than continuing invisibly in the background.
+- **Transparent Failure Handling**: If an API provider rate-limits or throws an error on a specific paragraph, errors are never silently swallowed. The affected chunk is visibly marked with `⚠️ Review Failed` and an explicit `⚠️ Retry Review` action.
+- **Destructive Action Protections**: Switching granularity or committing to notes with external modifications must prompt the user with clear decision summaries before discarding or overwriting data.
+
+
 
 

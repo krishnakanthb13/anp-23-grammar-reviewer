@@ -207,9 +207,13 @@ const plugin = {
           await handleRunReview(app, typeof args[1] === "number" ? args[1] : -1, args[2] || "");
           break;
 
-        case "reviewAll":
-          await handleReviewAll(app);
+        case "reviewAll": {
+          const res = await handleReviewAll(app);
+          if (res && res.failedCount > 0) {
+            await app.alert(`Review All completed: ${res.reviewedCount} chunks reviewed, ${res.failedCount} item(s) failed.`);
+          }
           break;
+        }
 
         case "cancelReviewAll":
           cancelReviewAll();
@@ -274,38 +278,58 @@ const plugin = {
 
         case "saveAndCommit":
           if (session) {
-            const auditEnabled = Boolean(args[1]);
-            const confirmSave = await app.prompt("Commit Grammar Review Rewrites?", {
-              inputs: [
-                {
-                  label: "Also create extra changes & history report notes (-reports/-grammar/*)? (Optional — Amplenote natively captures note revision history)",
-                  type: "checkbox",
-                  value: auditEnabled
-                }
-              ]
-            });
-
-            if (confirmSave !== null && confirmSave !== false) {
-              const shouldCreateNotes = typeof confirmSave === "object"
-                ? Boolean(confirmSave["Also create extra changes & history report notes (-reports/-grammar/*)? (Optional — Amplenote natively captures note revision history)"] ?? confirmSave[0])
-                : Boolean(confirmSave);
-
+            const shouldCreateNotes = Boolean(args[1]);
+            try {
               const res = await handleSaveAndCommit(app, shouldCreateNotes);
-              if (shouldCreateNotes && res.changesNoteUUID) {
-                await app.alert(`Changes saved to source note!\n\nAudit report created: ${res.changesNoteUUID}`);
-              } else {
-                await app.alert("Changes successfully saved to source note!");
+              if (res && res.cancelled) {
+                return { success: false, cancelled: true, message: "Save cancelled: Source note was modified externally." };
               }
+              if (res && res.success) {
+                if (typeof app.alert === "function") {
+                  try {
+                    await app.alert(shouldCreateNotes && res.changesNoteUUID
+                      ? `Changes successfully saved to note!\n\nCompanion report created: ${res.changesNoteUUID}`
+                      : `Changes successfully saved to ${session.noteTitle || "note"}!`);
+                  } catch {}
+                }
+                return {
+                  success: true,
+                  noteUUID: session.noteUUID,
+                  noteTitle: session.noteTitle,
+                  changesNoteUUID: res.changesNoteUUID,
+                  historyNoteUUID: res.historyNoteUUID
+                };
+              }
+            } catch (err) {
+              console.error("[GrammarReviewer] saveAndCommit failed:", err);
+              if (typeof app.alert === "function") {
+                try {
+                  await app.alert(`Failed to save note: ${err?.message || err}`);
+                } catch {}
+              }
+              return { success: false, error: err?.message || String(err) };
             }
           }
           break;
 
         case "openNote":
-          if (args[1]) {
-            await app.navigate(`https://www.amplenote.com/notes/${args[1]}`);
+          {
+            const targetUUID = args[1] || session?.noteUUID;
+            if (targetUUID) {
+              try {
+                if (typeof app.openNote === "function") {
+                  await app.openNote(targetUUID);
+                } else if (typeof app.navigate === "function") {
+                  await app.navigate(`https://www.amplenote.com/notes/${targetUUID}`);
+                }
+              } catch (e) {
+                console.warn("[GrammarReviewer] openNote error:", e);
+              }
+            }
           }
           requiresReRender = false;
           break;
+
 
         default:
           console.warn("[GrammarReviewer] Unhandled action:", action);

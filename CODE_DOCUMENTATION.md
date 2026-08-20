@@ -120,8 +120,10 @@ The test suite runs with Jest under Node ESM VM modules (`$env:NODE_OPTIONS="--e
 - [`test/reviewSession.test.js`](test/reviewSession.test.js): Paragraph-preserving sentence reconstruction, undo stack, metrics calculation, and serialization.
 - [`test/diffViewComponent.test.js`](test/diffViewComponent.test.js): State-aware action buttons, 4 view modes, Teacher's Insight, and Review Navigator rendering.
 - [`test/saveHandler.test.js`](test/saveHandler.test.js): Source note overwrite, stale guard validation, and optional audit report creation.
-- [`test/reportGenerator.test.js`](test/reportGenerator.test.js): Markdown report formatting and metadata headers.
-- [`test/historyManager.test.js`](test/historyManager.test.js): History record persistence and JSON format verification.
+- [`test/reportGenerator.test.js`](test/reportGenerator.test.js): Markdown report formatting, safe dynamic code fence escaping, and metadata headers.
+- [`test/historyManager.test.js`](test/historyManager.test.js): History record persistence, safe JSON code fence embedding, and JSON format verification.
 - [`test/providers.test.js`](test/providers.test.js): Mock fetch validation across all 8 provider adapters.
 - [`test/providerRegistry.test.js`](test/providerRegistry.test.js): Configuration parsing, key masking, and provider instantiation.
-- [`test/promptPresets.test.js`](test/promptPresets.test.js): System and user prompt construction across presets.
+- [`test/promptPresets.test.js`](test/promptPresets.test.js): System and user prompt construction, structured JSON response parser (`parseAiResponse`), and plain-text fallback handling.
+- [`test/scenarioWorkflow.test.js`](test/scenarioWorkflow.test.js): End-to-end integration and workflow scenario tests (Scenarios A–G covering sentence preservation, markdown structure preservation, partial failure resilience, mid-stream cancellation, stale overwrite protection, granularity switching, and manual edit state flows).
+

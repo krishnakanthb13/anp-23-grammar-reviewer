@@ -1,14 +1,14 @@
 ## Test Report — Grammar & Style Reviewer (anp-23)
 
-| Metric              | Result                        |
-|---------------------|-------------------------------|
-| Total test suites   | 10 ✅                         |
-| Total tests         | 61                            |
-| Passed              | 61 ✅                         |
-| Failed              | 0 ❌                          |
-| Skipped             | 0 ⚠️                         |
-| Confidence Score    | 10/10                         |
-| Regression Coverage | Yes (CRLF, Token Diff, Deduplication) |
+| Metric              | Result                                |
+|---------------------|---------------------------------------|
+| Total test suites   | 11 ✅                                 |
+| Total tests         | 79                                    |
+| Passed              | 79 ✅                                 |
+| Failed              | 0 ❌                                  |
+| Skipped             | 0 ⚠️                                  |
+| Confidence Score    | 10/10                                 |
+| Regression Coverage | Yes (CRLF, Token Diff, Stale Guard, Triple-Quote AI Parser, Scenario Integration) |
 
 ### Test Suite Breakdown
 
@@ -16,7 +16,7 @@
    - Happy Path: Myers/LCS token diff, word tokenization with punctuation separation, multi-part diff output.
    - Edge Cases: Identical strings, empty strings, insertions from empty, full deletions.
    - Error Handling: HTML tag escaping, XSS sanitization.
-   - Regression: Preserving chronological diff segment order.
+   - Changes Only: Structured change object extraction and card rendering.
 
 2. `tokenizer.test.js` (8 tests):
    - Happy Path: Paragraph chunking, code fence preservation, sentence splitting with abbreviation protection.
@@ -29,12 +29,13 @@
    - Edge Cases: JSON serialization (toJSON/fromJSON), additions/deletions word stats.
    - Error Handling: Out-of-bounds index handling.
 
-4. `saveHandler.test.js` (5 tests):
+4. `saveHandler.test.js` (7 tests):
    - Happy Path: Direct source note overwriting, companion audit report note creation.
    - Error Handling & Validation: Null session guards, missing noteUUID validation, API failure propagation.
+   - Stale Note Concurrency: Aborts when external note modification detected and overwrite declined; proceeds when user confirms.
 
 5. `historyManager.test.js` (5 tests):
-   - Happy Path: Structured JSON history generation, JSON embedded history parsing.
+   - Happy Path: Structured JSON history generation, JSON embedded history parsing with safe code fences.
    - Edge Cases & Fallbacks: Markdown fallback report parsing, deduplication matching.
 
 6. `providerRegistry.test.js` (7 tests):
@@ -44,11 +45,21 @@
 7. `providers.test.js` (9 tests):
    - Full mock fetch validation for all 8 AI providers (OpenRouter, Gemini, Groq, Mistral, DeepSeek, Ollama, OpenAI, Anthropic) + 401/500 error propagation.
 
-8. `promptPresets.test.js` (3 tests):
+8. `promptPresets.test.js` (7 tests):
    - Prompt construction with system/user instructions, preset lookup by ID, default fallback.
+   - Structured JSON AI response parsing, markdown-fenced JSON parsing, Python-style triple quotes `"""` extraction, multiline raw string support, and graceful plain-text fallback handling.
 
-9. `diffViewComponent.test.js` (3 tests):
-   - Dual-pane card rendering, clean/inline toggle controls, empty states, button boundary disabling.
+9. `diffViewComponent.test.js` (5 tests):
+   - Dual-pane card rendering, clean/inline/side/changes toggle controls, empty states, button boundary disabling, state-aware action buttons with Undo.
 
 10. `reportGenerator.test.js` (2 tests):
-    - Changes report markdown generation and session round-trip validation.
+    - Changes report markdown generation with safe code fence escaping and session round-trip validation.
+
+11. `scenarioWorkflow.test.js` (7 tests):
+    - Scenario A: Preserves untouched sentences and exact paragraph structure when reviewing a middle sentence.
+    - Scenario B: Preserves markdown structures (headers, bold, lists, quotes, code blocks) byte-accurately.
+    - Scenario C: Review All handles individual API failures gracefully and flags failed items.
+    - Scenario D: Cancelling Review All stops subsequent API calls immediately.
+    - Scenario E: Stale save guard blocks note overwrite when external edits exist and user declines.
+    - Scenario F: Switching granularity retokenizes original content without loss.
+    - Scenario G: Manual edit on pending item transitions to modified without losing custom text.
