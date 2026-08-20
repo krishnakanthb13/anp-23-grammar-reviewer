@@ -1,5 +1,25 @@
 # Release Notes: Amplenote Grammar & Style Reviewer
 
+## v0.0.7 (2026-08-20)
+
+### 🚀 Major Enhancements
+- **Paragraph-Preserving Sentence Reconstruction**: Upgraded sentence tokenizer and session reconstructor with parent paragraph tracking and boundary protection. Document structure and paragraph breaks are faithfully preserved during sentence-by-sentence editing.
+- **Review Navigator with Jump-to Selector**: Added a top navigation toolbar with a Jump-to dropdown showing item statuses (`✓ Accepted`, `✕ Rejected`, `✎ Edited`, `● Ready`, `○ Pending`), plus `⏮ Prev Pending` and `Next Pending ⏭` buttons for quick inspection.
+- **4 Interactive Diff Modes**:
+  - `✨ Clean Prose`: Clear, readable rewrite with subtle highlights.
+  - `🔀 Inline Diff`: Unified in-place diff with `<del>` and `<ins>`.
+  - `👥 Side-by-Side`: Dual synchronized original vs suggestion panes.
+  - `📋 Changes Only`: Structured card list of distinct replacements, additions, and deletions.
+- **Teacher's Insight & Rationales**: Added Teacher's Insight callouts explaining grammar, clarity, conciseness, and tone improvements with category badges and confidence ratings.
+- **Reversible Decision Undo**: Implemented an undo stack (`↩ Undo`, keyboard shortcut `U` / `Ctrl+Z`) to restore prior item states and suggestions without losing progress.
+- **Top Operation Loading Bar & Live Status Banner**: Added a slim animated progress indicator and operation banner with 1-click **Stop Review** cancellation for `Review All`.
+- **Reason-Guided Re-Reviewing**: Re-review items with preset prompts ("Too aggressive - preserve voice", "Grammar only", "More concise", "Improve clarity", or custom prompt).
+- **Stale Note Overwrite Guard**: Alerts the user if the underlying note was modified externally during review before committing changes.
+- **Extended Tokenizer Abbreviations**: Expanded abbreviation protections with 40+ honorifics, titles, academic degrees, time units, decimal numbers, and URLs to prevent improper sentence fragmentation.
+- **New Presets**: Added `Minimal Changes (Preserve Voice)` and `Teacher & Coach (Clarity & Flow)` presets.
+
+---
+
 ## v0.0.4 (2026-08-20)
 
 ### ⚡ Performance & Optimization

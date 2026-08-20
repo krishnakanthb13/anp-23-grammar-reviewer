@@ -2,7 +2,7 @@
 
 ## 1. Architecture Overview
 
-The **Grammar & Style Reviewer** is built with a modular, decoupled architecture adhering to ESM patterns, local session persistence, and zero-latency client-side view management.
+The **Grammar & Style Reviewer** is built with a modular, decoupled architecture adhering to ESM patterns, local session persistence, reversible state machines, and zero-latency client-side view management.
 
 ```mermaid
 graph TD
@@ -30,12 +30,18 @@ graph TD
     
     Session --> Tokenizer[tokenizer.js]
     Session --> DiffEngine[diffEngine.js]
+    Session --> UndoStack[Undo / History Stack]
     
     Entry --> Dashboard[dashboardTemplate.js]
+    Dashboard --> TopLoader[Top Progress Loader & Op Banner]
     Dashboard --> SidebarPanel[promptSelectorComponent.js]
     Dashboard --> DiffCard[diffViewComponent.js]
+    DiffCard --> ReviewNavigator[Review Navigator & Jump Dropdown]
+    DiffCard --> DiffModes[4 Diff Modes: Clean / Inline / Side / Changes]
+    DiffCard --> TeacherInsight[Teacher Insight Rationale Box]
     Dashboard --> Styles[styles.css.js]
     
+    CommitManager --> StaleGuard[Stale Note Concurrency Check]
     CommitManager --> ReportGen[reportGenerator.js]
     CommitManager --> HistoryMgr[historyManager.js]
 ```
@@ -45,15 +51,22 @@ graph TD
 ## 2. Core Modules
 
 ### `lib/engine/`
-- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected states, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence. Defaults to `Full Note` mode. Fully annotated with comprehensive JSDoc contracts.
-- **`tokenizer.js`**: Breaks Markdown text into inspectable units (`full`, `paragraph`, `sentence`) while preserving empty lines, markdown code fences, headers, and bullet structures. Automatically normalizes CRLF (`\r\n`) line endings upfront.
-- **`diffEngine.js`**: Fine-grained sub-word and punctuation LCS/Myers diff algorithm generating `originalHtml` (deletions in red), `suggestedHtml` (clean readable prose with green insertions), and `inlineHtml` (interleaved diff). Optimized for linear-time $O(k)$ diff reconstruction.
-- **`promptPresets.js`**: Pre-configured system and user prompts for tone, conciseness, flow, humor, and grammar corrections.
+- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected/modified states, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence.
+  - **Undo Stack**: Maintains a bounded snapshot stack (`pushUndo`, `undo`, `canUndo`) on each item for reversible decisions.
+  - **Paragraph-Preserving Sentence Reconstruction**: `getReconstructedContent()` preserves multi-line markdown structures and joins intra-paragraph sentences with spaces rather than extra newlines.
+  - **Pending Navigation Helpers**: `getNextPendingIndex()` and `getPrevPendingIndex()` to skip reviewed chunks.
+- **`tokenizer.js`**: Breaks Markdown text into inspectable units (`full`, `paragraph`, `sentence`) while preserving empty lines, markdown code fences, headers, and bullet structures.
+  - **Parent Paragraph Tracking**: Annotates sentences with `parentParagraphId` and `isLastInParagraph` for reconstructive integrity.
+  - **Expanded Abbreviation Protections**: 40+ honorifics (`Dr.`, `Prof.`), titles (`Inc.`, `Ltd.`), time units (`min.`, `sec.`), decimals (`3.14`), and URLs to prevent improper sentence fragmentation.
+- **`diffEngine.js`**: Fine-grained sub-word and punctuation LCS/Myers diff algorithm with common prefix/suffix optimization.
+  - **4 Diff Modes**: Produces `suggestedHtml` (Clean Prose), `inlineHtml` (Unified Diff), `originalHtml` (Side-by-Side), and `changesHtml` (Changes Only list).
+  - **`extractChangesList(diff)`**: Extracts structured change objects (`{ type, original, suggested }`) for the Changes Only card view.
+- **`promptPresets.js`**: Pre-configured system and user prompts for tone, conciseness, flow, humor, minimal changes, and teacher/coach modes.
 
 ### `lib/features/`
 - **`launcher.js`**: Direct 1-click fullscreen launcher that automatically resolves and remembers the `Last Opened Note UUID` across sessions.
-- **`reviewWorkflow.js`**: AI completion runner with isolated endpoint routing for cloud vs Ollama providers.
-- **`saveHandler.js`**: Overwrites source note directly with note UUID validation and error handling; optionally generates human-readable changes reports and JSON history notes when audit logging is enabled.
+- **`reviewWorkflow.js`**: AI completion runner with cancellation support (`cancelReviewAll`), transient item reviewing states, and re-review prompt overrides.
+- **`saveHandler.js`**: Overwrites source note directly with note UUID validation and error handling; includes a concurrency guard that checks `app.getNoteContent()` to prevent overwriting stale externally modified notes. Optionally generates companion audit notes.
 - **`historyViewer.js`**: Multi-query history fetcher querying and deduplicating past review sessions.
 
 ### `lib/providers/`
@@ -61,30 +74,46 @@ graph TD
 - **`providerRegistry.js`**: Factory instantiating adapters for **OpenRouter, Gemini, Groq, Mistral, DeepSeek, Ollama, OpenAI, and Anthropic**. Extracts per-provider keys and model maps (JSON dictionary) via safe, resilient parsing without requiring extra setting rows.
 
 ### `lib/ui/`
-- **`dashboardTemplate.js`**: Renders the complete HTML shell with embedded client-side routing (`Reviewer`, `History Logs`, `Settings`), keyboard shortcuts, dynamic theme switcher, Amplenote Revision History legend, and synchronized dual-pane scroll locks.
-- **`styles.css.js`**: High-performance CSS engine providing a 100% full-width 2-column workbench layout (`.gr-workbench`), 6 complete themes (`midnight`, `nord`, `glass`, `emerald`, `purple`, `light`), fluid scrollbars, and side-by-side diff highlights.
-- **`promptSelectorComponent.js`**: Left sidebar control panel rendering active AI engine & model badge/dropdown (filtered to saved providers), granularity segmented pills, prompt presets list, and live progress metrics.
-- **`diffViewComponent.js`**: Dual-pane side-by-side original vs clean AI suggestion diff with 0ms view toggle pills (`✨ Clean Prose` vs `🔀 Inline Diff`).
+- **`dashboardTemplate.js`**: Renders the complete HTML shell with embedded client-side routing (`Reviewer`, `History Logs`, `Settings`), top operation loader bar (`.gr-top-loader`), live operation banner, Re-Review reason dialog, keyboard shortcuts (`A`, `R`, `U`, `N`/`P`, `T`), dynamic theme switcher, and synchronized dual-pane scroll locks.
+- **`diffViewComponent.js`**:
+  - **Review Navigator**: Jump-to item dropdown with status badges (`✓`, `✕`, `✎`, `●`, `○`) and pending navigation buttons.
+  - **4 Diff View Modes**: Segmented toggle buttons (`✨ Clean Prose`, `🔀 Inline Diff`, `👥 Side-by-Side`, `📋 Changes Only`).
+  - **Teacher's Insight Box**: Explanations, category tags (Grammar, Clarity, Word Choice), and confidence indicators.
+  - **State-Aware Action Buttons**: Contextual button groups per state (`pending`, `suggestion_ready`, `accepted`, `rejected`, `modified`) with reversible `↩ Undo`.
+- **`promptSelectorComponent.js`**: Left sidebar control panel rendering active AI engine & model dropdown (filtered to saved providers), granularity segmented pills, prompt presets list, pending count badge (`⚡ All Pending (N)`), and live progress metrics.
+- **`styles.css.js`**: High-performance CSS engine providing a 100% full-width 2-column workbench layout (`.gr-workbench`), 6 complete themes (`midnight`, `nord`, `glass`, `emerald`, `purple`, `light`), fluid scrollbars, and diff highlights.
 
 ---
 
 ## 3. Communication & State Flow
 
 1. **Host Bridge**: All embed user interactions invoke Amplenote's official `window.callAmplenotePlugin(action, ...args)` bridge.
-2. **Side-by-Side Clean Diffing**:
-   - Left pane highlights deleted text (`<span class="diff-del-highlight">`) in the original draft.
-   - Right pane renders clean, readable prose with inserted words highlighted in emerald green (`<span class="diff-ins-highlight">`).
-3. **Optional Audit Logging (Off by Default)**:
-   - Amplenote natively captures note version history every 10 minutes. By default, reviews save directly into the active note without creating extra note files unless explicitly enabled in settings.
-4. **Per-Provider Model Persistence**:
+2. **Reversible Decision State Transitions**:
+   - `pending` ➔ `suggestion_ready` (via `runReview` or `reviewAll`)
+   - `suggestion_ready` ➔ `accepted` (via `acceptItem` / `A`)
+   - `suggestion_ready` ➔ `rejected` (via `rejectItem` / `R`)
+   - Any state ➔ `modified` (via `manualEditItem`)
+   - `accepted` / `rejected` / `modified` ➔ prior state (via `undoItem` / `U`)
+3. **4 Diff View Modes (0ms Switching)**:
+   - `setDiffViewMode(index, mode)` switches between Clean Prose, Inline Diff, Side-by-Side, and Changes Only entirely in client JS using pre-encoded DOM data attributes.
+4. **Stale Note Concurrency Protection**:
+   - Prior to committing, `saveHandler.js` verifies if the target note's current content matches the session baseline. If external changes are detected, a confirmation prompt prevents unintentional overwrites.
+5. **Per-Provider Model Persistence**:
    - `app.settings["Custom AI Model"]` stores a clean JSON dictionary `{ [provider]: model }` allowing independent model memory per provider without modifying the note settings table schema.
 
 ---
 
 ## 4. Test Suite
 
-- [`test/tokenizer.test.js`](file:///c:/Users/ADMIN/OneDrive/Documents/GitHub/amplenote_stg_plugins/anp-23-grammar-reviewer/test/tokenizer.test.js): Tokenization across full, paragraph, and sentence modes.
-- [`test/diffEngine.test.js`](file:///c:/Users/ADMIN/OneDrive/Documents/GitHub/amplenote_stg_plugins/anp-23-grammar-reviewer/test/diffEngine.test.js): Word-level diff accuracy, whitespace normalization, and HTML escaping.
-- [`test/reportGenerator.test.js`](file:///c:/Users/ADMIN/OneDrive/Documents/GitHub/amplenote_stg_plugins/anp-23-grammar-reviewer/test/reportGenerator.test.js): Report formatting and session serialization.
-- [`test/providers.test.js`](file:///c:/Users/ADMIN/OneDrive/Documents/GitHub/amplenote_stg_plugins/anp-23-grammar-reviewer/test/providers.test.js): Mock fetch validation across all 8 provider adapters.
-- [`test/liveProviderTester.js`](file:///c:/Users/ADMIN/OneDrive/Documents/GitHub/amplenote_stg_plugins/anp-23-grammar-reviewer/test/liveProviderTester.js): Standalone simulated and live provider diagnostic runner.
+The test suite runs with Jest under Node ESM VM modules (`$env:NODE_OPTIONS="--experimental-vm-modules"; npx jest anp-23-grammar-reviewer/test`):
+
+- [`test/tokenizer.test.js`](test/tokenizer.test.js): Tokenization across full, paragraph, and sentence modes, parent paragraph tracking, and abbreviation protections.
+- [`test/diffEngine.test.js`](test/diffEngine.test.js): Word-level diff accuracy, 4 diff modes, changesList extraction, whitespace normalization, and HTML escaping.
+- [`test/reviewSession.test.js`](test/reviewSession.test.js): Paragraph-preserving sentence reconstruction, undo stack, metrics calculation, and serialization.
+- [`test/diffViewComponent.test.js`](test/diffViewComponent.test.js): State-aware action buttons, 4 view modes, Teacher's Insight, and Review Navigator rendering.
+- [`test/saveHandler.test.js`](test/saveHandler.test.js): Source note overwrite, stale guard validation, and optional audit report creation.
+- [`test/reportGenerator.test.js`](test/reportGenerator.test.js): Markdown report formatting and metadata headers.
+- [`test/historyManager.test.js`](test/historyManager.test.js): History record persistence and JSON format verification.
+- [`test/providers.test.js`](test/providers.test.js): Mock fetch validation across all 8 provider adapters.
+- [`test/providerRegistry.test.js`](test/providerRegistry.test.js): Configuration parsing, key masking, and provider instantiation.
+- [`test/promptPresets.test.js`](test/promptPresets.test.js): System and user prompt construction across presets.

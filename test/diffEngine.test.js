@@ -88,14 +88,21 @@ describe("Diff Engine — Error Handling & Sanitization", () => {
   });
 });
 
-describe("Diff Engine — Regression Tests", () => {
-  test("Maintains linear-time reconstruction order without inverted diff parts", () => {
-    const original = "one two three";
-    const suggested = "one modified three";
+describe("Diff Engine — Changes Only Mode & List Extraction", () => {
+  test("Extracts paired changes and renders Changes Only HTML correctly", () => {
+    const original = "She go to school.";
+    const suggested = "She goes to school.";
     const result = computeWordDiff(original, suggested);
-    
-    // Equal parts must precede and follow the modification in correct order
-    expect(result.diff[0].value).toBe("one");
-    expect(result.diff[result.diff.length - 1].value).toBe("three");
+
+    expect(result.changesList.length).toBe(1);
+    expect(result.changesList[0]).toEqual({
+      type: "replace",
+      original: "go",
+      suggested: "goes"
+    });
+    expect(result.changesHtml).toContain("badge-replace");
+    expect(result.changesHtml).toContain("go");
+    expect(result.changesHtml).toContain("goes");
   });
 });
+

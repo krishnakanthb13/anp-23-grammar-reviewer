@@ -35,7 +35,7 @@
    - Source code contains zero calls to `eval()`, `new Function()`, `document.write()`, or `setTimeout(string)`.
 
 3. **Injection & XSS Protection**:
-   - All text rendered into HTML templates (note titles, diff segments, tokens, presets, and model values) is escaped via [`escapeHtml()`](file:///c:/Users/ADMIN/OneDrive/Documents/GitHub/amplenote_stg_plugins/anp-23-grammar-reviewer/lib/engine/diffEngine.js) before insertion.
+   - All text rendered into HTML templates (note titles, diff segments, tokens, presets, and model values) is escaped via [`escapeHtml()`](lib/engine/diffEngine.js) before insertion.
    - Diff attributes in DOM elements (`data-clean`, `data-inline`, `data-plain`) are encoded via `encodeURIComponent` to prevent attribute injection.
 
 4. **Masked Key Display & UI Security**:

@@ -6,17 +6,31 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 
 ## ✨ Key Features
 
-- **Clean Side-by-Side Readable Diff Checker**:
-  - **Left Pane (Original Draft)**: Displays original text with words to be replaced or removed highlighted in soft red strike-through.
-  - **Right Pane (AI Suggestion)**: Displays **clean, fully readable rewritten prose** with improved/inserted words highlighted in soft emerald green.
-  - **Interactive Mode Switcher**: Toggle between `✨ Clean Prose` (readable rewrite) and `🔀 Inline Diff` (interleaved side-by-side diff) in 0ms.
+- **4 Interactive Diff View Modes**:
+  - `✨ Clean Prose`: Displays clean, revised readable text with improved words highlighted in soft emerald green.
+  - `🔀 Inline Diff`: Traditional unified diff with inline `<del>` and `<ins>` highlights.
+  - `👥 Side-by-Side`: Dual-pane side-by-side comparison with original strikethroughs and suggestion insertions.
+  - `📋 Changes Only`: Filtered list of distinct modifications ("old" → "new", additions, removals) with change numbers and type badges.
+- **Review Navigator & Direct Item Jumping**:
+  - Direct Jump-to selector with live status icons (`✓ Accepted`, `✕ Rejected`, `✎ Edited`, `● Ready`, `○ Pending`).
+  - `⏮ Prev Pending` and `Next Pending ⏭` buttons to skip already reviewed chunks and jump directly to pending items.
+- **Teacher's Insight & Educational Explanations**:
+  - In-depth Teacher's Insight card explaining the grammar, clarity, conciseness, and stylistic rationale behind suggestions.
+  - Category tags (Grammar, Punctuation, Word Choice, Clarity) and confidence indicators.
+- **Reversible Decision Undo**:
+  - One-click `↩ Undo` on accepted, rejected, or manually edited items to revert decisions without losing progress.
+  - Power shortcut `U` or `Ctrl+Z`.
+- **Top Operation Loading Bar & Cancellation**:
+  - Slim animated top progress bar and operation status banner during single or batch reviews.
+  - 1-click **Stop Review** cancellation for `Review All`.
+- **Paragraph-Preserving Sentence Reconstruction**:
+  - Safe sentence tokenizer and reconstruction engine that preserves paragraph boundaries and multi-line markdown formatting without inserting stray newlines.
+- **Stale Note Overwrite Guard**:
+  - Automatically verifies if the note was changed externally during the review session before saving.
 - **Optional Audit Notes & Clean Notebook Default**:
   - **Turned OFF by default**: Directly writes accepted rewrites to your source note without creating cluttering report notes.
   - **Amplenote Native Version History**: Integrates with Amplenote's built-in 10-minute save point version history (`... > View revision history`).
   - **Optional Audit Logging**: Users can enable `-reports/-grammar/*` archive notes in Settings or History if dedicated iteration snapshots are desired.
-- **Direct 1-Click Fullscreen Launch & Note Memory**:
-  - Immediately opens in full screen with zero intermediate prompts.
-  - Automatically remembers and re-opens your **Last Reviewed Note** when launched from the App Menu.
 - **100% Full-Width 2-Column Workbench**:
   - **Left Sidebar Inspector**: AI engine selector, model switcher (only saved providers), segmented granularity switcher (`Full Note`, `Paragraph`, `Sentence`), prompt presets, live progress tracker, and hotkeys.
   - **Expansive Main Canvas**: 100% screen width and viewport height dedicated to side-by-side note diffs and review controls.
@@ -40,23 +54,24 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
   - 🌲 `Emerald Forest` (Deep botanical green with mint glow)
   - 💜 `Cyber Violet` (Neon violet & indigo velvet)
   - ☀️ `Clean Daylight` (High-contrast bright paper theme for daytime editing)
-- **Zero-Latency Client-Side Tabs**:
-  - Instantaneous switching between `Reviewer`, `History Logs`, and `⚙️ Settings` without iframe tearing or white flash.
 - **Power Keyboard Shortcuts**:
   - `A`: Accept active suggestion
   - `R`: Reject suggestion / keep original
+  - `U`: Undo last decision
   - `N` / `→`: Navigate to Next item
   - `P` / `←`: Navigate to Previous item
   - `T`: Cycle themes on the fly
 - **Pre-built Prompt Presets & Custom Instructions**:
   - Fix Grammar & Spelling
+  - Minimal Changes (Preserve Voice)
+  - Teacher & Coach (Clarity & Flow)
   - Shorten & Make Concise
   - Remove Passive Voice
   - Omit Unnecessary Adverbs
-  - Improve Flow & Readability
+  - Improve Flow & Rhythm
   - Professional & Business Tone
-  - Add Subtle Humor & Wit
   - Academic & Analytical Tone
+  - Add Subtle Humor & Wit
   - *Custom user prompts supported.*
 
 ---
@@ -114,8 +129,8 @@ A modular, multi-AI grammar and style reviewer for Amplenote. Incrementally insp
 ## 🛠️ Development & Testing
 
 ```bash
-# Run complete test suite (16 tests across all engines)
-$env:NODE_OPTIONS="--experimental-vm-modules"; npx jest anp-23-grammar-reviewer
+# Run complete test suite (66 unit tests across 10 test suites)
+$env:NODE_OPTIONS="--experimental-vm-modules"; npx jest anp-23-grammar-reviewer/test
 
 # Run standalone 8-AI provider diagnostic simulation
 node anp-23-grammar-reviewer/test/liveProviderTester.js
@@ -123,6 +138,7 @@ node anp-23-grammar-reviewer/test/liveProviderTester.js
 # Build production bundle
 node esbuild.js 23
 ```
+
 Output bundle: `anp-23-grammar-reviewer/build/grammar-reviewer.compiled.js`
 
 ---

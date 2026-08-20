@@ -63,7 +63,61 @@ describe("ReviewSession — Happy Path", () => {
     expect(session.items[0].customEdit).toBe("Manually crafted text.");
     expect(session.getReconstructedContent()).toBe("Manually crafted text.");
   });
+
+  test("Preserves paragraph structure during sentence-mode reconstruction", () => {
+    const original = "This is sentence one. This is sentence two.\n\nThis is paragraph two.";
+    const session = new ReviewSession({
+      noteUUID: "uuid-123",
+      noteTitle: "Sentence Test",
+      originalContent: original,
+      granularity: "sentence"
+    });
+
+    expect(session.items.length).toBeGreaterThan(2);
+
+    // Accept sentence 1 edit
+    session.setSuggestion(0, "This is improved sentence one.");
+    session.accept(0);
+
+    const reconstructed = session.getReconstructedContent();
+    // Sentence one and two must be in the same paragraph joined by space, not split across newlines!
+    expect(reconstructed).toContain("This is improved sentence one. This is sentence two.");
+    expect(reconstructed).toContain("\n\nThis is paragraph two.");
+  });
+
+  test("Supports reversible Undo of decisions", () => {
+    const session = new ReviewSession({
+      noteUUID: "uuid-123",
+      originalContent: "Original sentence."
+    });
+
+    session.setSuggestion(0, "Suggested sentence.");
+    expect(session.items[0].status).toBe("suggestion_ready");
+
+    session.accept(0);
+    expect(session.items[0].status).toBe("accepted");
+    expect(session.canUndo(0)).toBe(true);
+
+    const undone = session.undo(0);
+    expect(undone).toBe(true);
+    expect(session.items[0].status).toBe("suggestion_ready");
+  });
+
+  test("Finds next and previous pending items accurately", () => {
+    const session = new ReviewSession({
+      noteUUID: "uuid-123",
+      originalContent: "Para 1.\n\nPara 2.\n\nPara 3.",
+      granularity: "paragraph"
+    });
+
+    // Item 0 is Para 1, Item 1 is separator (not inspectable), Item 2 is Para 2, Item 3 is separator, Item 4 is Para 3
+    expect(session.getNextPendingIndex(0)).toBe(2);
+    session.accept(2); // Para 2 accepted
+    expect(session.getNextPendingIndex(0)).toBe(4); // Skips to Para 3
+    expect(session.getPrevPendingIndex(4)).toBe(0); // Skips backward to Para 1
+  });
 });
+
 
 describe("ReviewSession — Edge Cases & Serialization", () => {
   test("Serializes and deserializes session state accurately", () => {
@@ -118,5 +172,7 @@ describe("ReviewSession — Error Handling", () => {
     expect(() => session.accept(999)).not.toThrow();
     expect(() => session.reject(999)).not.toThrow();
     expect(() => session.manualEdit(999, "No edit")).not.toThrow();
+    expect(() => session.undo(999)).not.toThrow();
   });
 });
+

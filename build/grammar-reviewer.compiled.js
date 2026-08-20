@@ -123,6 +123,18 @@ var PREBUILT_PROMPTS = [
     instruction: "Carefully correct all spelling, punctuation, grammatical errors, and typos. Maintain the original meaning, voice, and markdown formatting exactly."
   },
   {
+    id: "minimal_changes",
+    name: "Minimal Changes (Preserve Voice)",
+    description: "Fixes strictly objective errors and awkward phrasing while strictly preserving the author's wording.",
+    instruction: "Change ONLY what materially improves grammatical correctness and readability. Strictly preserve the author's original words, voice, and sentence structure whenever possible. Do not rewrite or restyle unnecessarily."
+  },
+  {
+    id: "teacher_editor",
+    name: "Teacher & Coach (Clarity & Flow)",
+    description: "Corrects errors and sharpens clarity, word choice, and rhythm like a senior editor.",
+    instruction: "Act as a senior copyeditor and writing coach. Correct errors, eliminate redundancies, and refine awkward phrasing while preserving the author's authentic style."
+  },
+  {
     id: "concise_shorten",
     name: "Shorten & Make Concise",
     description: "Removes filler words and redundancies to express ideas with maximum clarity.",
@@ -142,7 +154,7 @@ var PREBUILT_PROMPTS = [
   },
   {
     id: "improve_flow",
-    name: "Improve Flow & Readability",
+    name: "Improve Flow & Rhythm",
     description: "Enhances transitions, sentence rhythm, and overall paragraph structure.",
     instruction: "Enhance sentence variety, cadence, transitions, and paragraph flow. Ensure ideas transition logically and comfortably."
   },
@@ -153,17 +165,24 @@ var PREBUILT_PROMPTS = [
     instruction: "Refine the text to sound polished, confident, professional, and business-ready. Avoid slang and overly colloquial idioms."
   },
   {
-    id: "add_humor",
-    name: "Add Subtle Humor & Wit",
-    description: "Injects lighthearted wit and clever analogies where appropriate.",
-    instruction: "Inject subtle wit, clever analogies, or lighthearted humor to make the content engaging and delightful while preserving the core message."
-  },
-  {
     id: "academic_clarity",
     name: "Academic & Analytical",
     description: "Structures arguments rigorously with precise academic terminology.",
     instruction: "Elevate the prose to an academic and rigorous standard. Use precise terminology, structured reasoning, and objective phrasing."
+  },
+  {
+    id: "add_humor",
+    name: "Add Subtle Humor & Wit",
+    description: "Injects lighthearted wit and clever analogies where appropriate.",
+    instruction: "Inject subtle wit, clever analogies, or lighthearted humor to make the content engaging and delightful while preserving the core message."
   }
+];
+var RE_REVIEW_REASONS = [
+  { id: "preserve_voice", label: "Too aggressive (Preserve my voice)", prompt: "The previous suggestion changed too much. Please make minimal changes, strictly preserving my original voice and phrasing while fixing only clear errors." },
+  { id: "grammar_only", label: "Fix grammar & spelling only", prompt: "Fix strictly spelling, punctuation, and grammar mistakes only. Do not make stylistic or vocabulary changes." },
+  { id: "more_concise", label: "Make more concise & punchy", prompt: "Make this punchier and more concise. Trim unnecessary words and filler phrases." },
+  { id: "improve_clarity", label: "Improve clarity & transitions", prompt: "Focus on making the flow between ideas natural and clear. Enhance sentence transitions." },
+  { id: "custom", label: "Custom instruction...", prompt: "" }
 ];
 
 // anp-23-grammar-reviewer/lib/engine/tokenizer.js
@@ -178,7 +197,9 @@ function tokenizeContent(text, mode = GRANULARITY_MODES.PARAGRAPH) {
         id: 1,
         original: normalized,
         type: "full",
-        isInspectable: normalized.trim().length > 0
+        isInspectable: normalized.trim().length > 0,
+        parentParagraphId: 1,
+        isLastInParagraph: true
       }
     ];
   }
@@ -209,19 +230,25 @@ function tokenizeParagraphs(text) {
     if (line.trim() === "") {
       if (currentBuffer.length > 0) {
         const chunkText = currentBuffer.join("\n");
+        const paraId = idCounter++;
         paragraphs.push({
-          id: idCounter++,
+          id: paraId,
           original: chunkText,
           type: "paragraph",
-          isInspectable: isInspectableText(chunkText)
+          isInspectable: isInspectableText(chunkText),
+          parentParagraphId: paraId,
+          isLastInParagraph: true
         });
         currentBuffer = [];
       }
+      const sepId = idCounter++;
       paragraphs.push({
-        id: idCounter++,
+        id: sepId,
         original: "",
         type: "separator",
-        isInspectable: false
+        isInspectable: false,
+        parentParagraphId: sepId,
+        isLastInParagraph: true
       });
     } else {
       currentBuffer.push(line);
@@ -229,11 +256,14 @@ function tokenizeParagraphs(text) {
   }
   if (currentBuffer.length > 0) {
     const chunkText = currentBuffer.join("\n");
+    const paraId = idCounter++;
     paragraphs.push({
-      id: idCounter++,
+      id: paraId,
       original: chunkText,
       type: "paragraph",
-      isInspectable: isInspectableText(chunkText)
+      isInspectable: isInspectableText(chunkText),
+      parentParagraphId: paraId,
+      isLastInParagraph: true
     });
   }
   return paragraphs;
@@ -251,35 +281,41 @@ function tokenizeSentences(text) {
       continue;
     }
     const sentences = splitIntoSentences(para.original);
-    for (const s of sentences) {
+    for (let sIdx = 0; sIdx < sentences.length; sIdx++) {
+      const s = sentences[sIdx];
+      const isLast = sIdx === sentences.length - 1;
       items.push({
         id: idCounter++,
         original: s,
         type: "sentence",
-        isInspectable: isInspectableText(s)
+        isInspectable: isInspectableText(s),
+        parentParagraphId: para.id,
+        isLastInParagraph: isLast
       });
     }
   }
   return items;
 }
+var ABBREVIATIONS_PATTERN = /\b(e\.g\.|i\.e\.|etc\.|mr\.|mrs\.|ms\.|dr\.|prof\.|sr\.|jr\.|inc\.|ltd\.|co\.|corp\.|u\.s\.|u\.k\.|u\.n\.|e\.u\.|ph\.d\.|m\.d\.|b\.a\.|m\.a\.|b\.s\.|m\.s\.|vs\.|fig\.|no\.|dept\.|est\.|approx\.|jan\.|feb\.|mar\.|apr\.|jun\.|jul\.|aug\.|sep\.|sept\.|oct\.|nov\.|dec\.|al\.|st\.|ave\.|rd\.|blvd\.)/gi;
 function splitIntoSentences(text) {
-  const protectedText = text.replace(/\b(e\.g\.|i\.e\.|etc\.|mr\.|mrs\.|dr\.|vs\.|fig\.|no\.)/gi, (match) => match.replace(/\./g, "\xA7DOT\xA7")).replace(/(\d+)\.(\d+)/g, "$1\xA7DOT\xA7$2");
-  const parts = protectedText.split(/([.!?]+(?:\s+|$))/g);
+  if (!text || typeof text !== "string") return [];
+  const protectedText = text.replace(ABBREVIATIONS_PATTERN, (match) => match.replace(/\./g, "\xA7DOT\xA7")).replace(/\b([A-Z])\./g, "$1\xA7DOT\xA7").replace(/(\d+)\.(\d+)/g, "$1\xA7DOT\xA7$2").replace(/(https?:\/\/[^\s]+)/g, (match) => match.replace(/\./g, "\xA7DOT\xA7"));
+  const parts = protectedText.split(/([.!?]+["')\]}]*(?:\s+|$))/g);
   const result = [];
   let current = "";
   for (let i = 0; i < parts.length; i++) {
     current += parts[i];
     if (i % 2 === 1 || i === parts.length - 1) {
       if (current.trim().length > 0) {
-        result.push(current.replace(/§DOT§/g, "."));
+        result.push(current.replace(/§DOT§/g, ".").trim());
         current = "";
       }
     }
   }
   if (current.trim().length > 0) {
-    result.push(current.replace(/§DOT§/g, "."));
+    result.push(current.replace(/§DOT§/g, ".").trim());
   }
-  return result.length > 0 ? result : [text];
+  return result.length > 0 ? result : [text.trim()];
 }
 function isInspectableText(text) {
   const trimmed = text.trim();
@@ -297,34 +333,64 @@ function tokenizeWords(text) {
 function computeTokenDiff(a, b) {
   const n = a.length;
   const m = b.length;
-  const matrix = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i2 = 1; i2 <= n; i2++) {
-    for (let j2 = 1; j2 <= m; j2++) {
-      if (a[i2 - 1] === b[j2 - 1]) {
-        matrix[i2][j2] = matrix[i2 - 1][j2 - 1] + 1;
-      } else {
-        matrix[i2][j2] = Math.max(matrix[i2 - 1][j2], matrix[i2][j2 - 1]);
+  let start = 0;
+  while (start < n && start < m && a[start] === b[start]) {
+    start++;
+  }
+  let endA = n - 1;
+  let endB = m - 1;
+  while (endA >= start && endB >= start && a[endA] === b[endB]) {
+    endA--;
+    endB--;
+  }
+  const midA = a.slice(start, endA + 1);
+  const midB = b.slice(start, endB + 1);
+  const subDiff = [];
+  if (midA.length > 0 && midB.length > 0) {
+    const subN = midA.length;
+    const subM = midB.length;
+    const matrix = Array.from({ length: subN + 1 }, () => new Array(subM + 1).fill(0));
+    for (let i2 = 1; i2 <= subN; i2++) {
+      for (let j2 = 1; j2 <= subM; j2++) {
+        if (midA[i2 - 1] === midB[j2 - 1]) {
+          matrix[i2][j2] = matrix[i2 - 1][j2 - 1] + 1;
+        } else {
+          matrix[i2][j2] = Math.max(matrix[i2 - 1][j2], matrix[i2][j2 - 1]);
+        }
       }
     }
-  }
-  const diff = [];
-  let i = n;
-  let j = m;
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
-      diff.push({ type: "equal", value: a[i - 1] });
-      i--;
-      j--;
-    } else if (j > 0 && (i === 0 || matrix[i][j - 1] >= matrix[i - 1][j])) {
-      diff.push({ type: "insert", value: b[j - 1] });
-      j--;
-    } else if (i > 0 && (j === 0 || matrix[i][j - 1] < matrix[i - 1][j])) {
-      diff.push({ type: "delete", value: a[i - 1] });
-      i--;
+    let i = subN;
+    let j = subM;
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && midA[i - 1] === midB[j - 1]) {
+        subDiff.push({ type: "equal", value: midA[i - 1] });
+        i--;
+        j--;
+      } else if (j > 0 && (i === 0 || matrix[i][j - 1] >= matrix[i - 1][j])) {
+        subDiff.push({ type: "insert", value: midB[j - 1] });
+        j--;
+      } else if (i > 0 && (j === 0 || matrix[i][j - 1] < matrix[i - 1][j])) {
+        subDiff.push({ type: "delete", value: midA[i - 1] });
+        i--;
+      }
     }
+    subDiff.reverse();
+  } else if (midA.length > 0) {
+    for (const val of midA) subDiff.push({ type: "delete", value: val });
+  } else if (midB.length > 0) {
+    for (const val of midB) subDiff.push({ type: "insert", value: val });
   }
-  diff.reverse();
-  return diff;
+  const result = [];
+  for (let i = 0; i < start; i++) {
+    result.push({ type: "equal", value: a[i] });
+  }
+  for (const item of subDiff) {
+    result.push(item);
+  }
+  for (let i = endA + 1; i < n; i++) {
+    result.push({ type: "equal", value: a[i] });
+  }
+  return result;
 }
 function computeWordDiff(original = "", suggested = "") {
   if (original === suggested) {
@@ -332,10 +398,12 @@ function computeWordDiff(original = "", suggested = "") {
     return {
       hasChanges: false,
       diff: origWords.map((w) => ({ type: "equal", value: w })),
-      stats: { additions: 0, deletions: 0, totalOriginalWords: origWords.length, totalSuggestedWords: origWords.length },
+      stats: { additions: 0, deletions: 0, totalOriginalWords: origWords.length, totalSuggestedWords: origWords.length, changeCount: 0 },
       inlineHtml: escapeHtml(original),
       originalHtml: escapeHtml(original),
-      suggestedHtml: escapeHtml(suggested)
+      suggestedHtml: escapeHtml(suggested),
+      changesHtml: `<div class="gr-no-changes-msg">\u2713 No textual changes detected. Original wording preserved.</div>`,
+      changesList: []
     };
   }
   const origTokens = tokenizeWords(original);
@@ -362,6 +430,8 @@ function computeWordDiff(original = "", suggested = "") {
       suggestedHtml += `<span class="diff-ins-highlight">${escaped}</span>`;
     }
   }
+  const changesList = extractChangesList(diff);
+  const changesHtml = renderChangesOnlyHtml(changesList);
   const hasChanges = additions > 0 || deletions > 0;
   return {
     hasChanges,
@@ -370,12 +440,89 @@ function computeWordDiff(original = "", suggested = "") {
       additions,
       deletions,
       totalOriginalWords: origTokens.length,
-      totalSuggestedWords: suggTokens.length
+      totalSuggestedWords: suggTokens.length,
+      changeCount: changesList.length
     },
     inlineHtml,
     originalHtml,
-    suggestedHtml
+    suggestedHtml,
+    changesHtml,
+    changesList
   };
+}
+function extractChangesList(diff) {
+  const changes = [];
+  let i = 0;
+  while (i < diff.length) {
+    if (diff[i].type === "equal") {
+      i++;
+      continue;
+    }
+    let delBuffer = "";
+    let insBuffer = "";
+    while (i < diff.length && (diff[i].type === "delete" || diff[i].type === "insert")) {
+      if (diff[i].type === "delete") {
+        delBuffer += diff[i].value;
+      } else if (diff[i].type === "insert") {
+        insBuffer += diff[i].value;
+      }
+      i++;
+    }
+    const cleanDel = delBuffer.trim();
+    const cleanIns = insBuffer.trim();
+    if (cleanDel && cleanIns) {
+      changes.push({ type: "replace", original: cleanDel, suggested: cleanIns });
+    } else if (cleanDel) {
+      changes.push({ type: "delete", original: cleanDel, suggested: "" });
+    } else if (cleanIns) {
+      changes.push({ type: "insert", original: "", suggested: cleanIns });
+    }
+  }
+  return changes;
+}
+function renderChangesOnlyHtml(changesList) {
+  if (!changesList || changesList.length === 0) {
+    return `<div class="gr-no-changes-msg">\u2713 No textual modifications. Original text looks good!</div>`;
+  }
+  const itemsHtml = changesList.map((ch, idx) => {
+    if (ch.type === "replace") {
+      return `
+        <div class="gr-change-row">
+          <span class="gr-change-num">#${idx + 1}</span>
+          <span class="gr-change-type badge-replace">Replace</span>
+          <span class="gr-change-del">"${escapeHtml(ch.original)}"</span>
+          <span class="gr-change-arrow">\u2192</span>
+          <span class="gr-change-ins">"${escapeHtml(ch.suggested)}"</span>
+        </div>
+      `;
+    } else if (ch.type === "delete") {
+      return `
+        <div class="gr-change-row">
+          <span class="gr-change-num">#${idx + 1}</span>
+          <span class="gr-change-type badge-delete">Removed</span>
+          <span class="gr-change-del">"${escapeHtml(ch.original)}"</span>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="gr-change-row">
+          <span class="gr-change-num">#${idx + 1}</span>
+          <span class="gr-change-type badge-insert">Added</span>
+          <span class="gr-change-ins">"${escapeHtml(ch.suggested)}"</span>
+        </div>
+      `;
+    }
+  }).join("");
+  return `
+    <div class="gr-changes-list-container">
+      <div class="gr-changes-list-header">
+        <strong>${changesList.length} Proposed Change${changesList.length === 1 ? "" : "s"}:</strong>
+      </div>
+      <div class="gr-changes-list-items">
+        ${itemsHtml}
+      </div>
+    </div>
+  `;
 }
 function escapeHtml(str) {
   if (!str) return "";
@@ -420,26 +567,89 @@ var ReviewSession = class _ReviewSession {
       original: token.original,
       type: token.type,
       isInspectable: token.isInspectable,
+      parentParagraphId: token.parentParagraphId || token.id,
+      isLastInParagraph: token.isLastInParagraph !== void 0 ? token.isLastInParagraph : true,
       status: "pending",
-      // "pending" | "accepted" | "rejected" | "modified"
+      // "pending" | "suggestion_ready" | "accepted" | "rejected" | "modified" | "no_change" | "error"
       suggestion: token.original,
       diff: null,
       customEdit: null,
-      reviewedAt: null
+      reviewedAt: null,
+      undoStack: [],
+      explanation: "",
+      category: "Grammar & Clarity",
+      confidence: "high"
     }));
+  }
+  /**
+   * Pushes current item snapshot to undo stack before mutating.
+   * @param {object} item
+   */
+  pushUndo(item) {
+    if (!item) return;
+    if (!item.undoStack) item.undoStack = [];
+    item.undoStack.push({
+      status: item.status,
+      suggestion: item.suggestion,
+      customEdit: item.customEdit,
+      diff: item.diff,
+      reviewedAt: item.reviewedAt
+    });
+    if (item.undoStack.length > 10) item.undoStack.shift();
+  }
+  /**
+   * Reverts the most recent status/content modification on the specified item.
+   * @param {number} index
+   * @returns {boolean}
+   */
+  undo(index) {
+    const item = this.items[index];
+    if (!item) return false;
+    if (item.undoStack && item.undoStack.length > 0) {
+      const prev = item.undoStack.pop();
+      item.status = prev.status;
+      item.suggestion = prev.suggestion;
+      item.customEdit = prev.customEdit;
+      item.diff = prev.diff;
+      item.reviewedAt = prev.reviewedAt;
+      return true;
+    }
+    if (item.status === "accepted" || item.status === "rejected" || item.status === "modified") {
+      item.status = item.diff && item.diff.hasChanges ? "suggestion_ready" : "pending";
+      item.customEdit = null;
+      return true;
+    }
+    return false;
+  }
+  /**
+   * Checks if an item can be undone.
+   * @param {number} index
+   * @returns {boolean}
+   */
+  canUndo(index) {
+    const item = this.items[index];
+    if (!item) return false;
+    return item.undoStack && item.undoStack.length > 0 || ["accepted", "rejected", "modified"].includes(item.status);
   }
   /**
    * Sets AI suggestion for a specific item and calculates diff.
    * @param {number} index
    * @param {string} suggestion
+   * @param {object} [metadata] - Optional AI explanation & category
    */
-  setSuggestion(index, suggestion) {
+  setSuggestion(index, suggestion, metadata = {}) {
     if (!this.items[index]) return;
     const item = this.items[index];
+    this.pushUndo(item);
     item.suggestion = suggestion;
     item.diff = computeWordDiff(item.original, suggestion);
+    item.explanation = metadata.explanation || "";
+    item.category = metadata.category || (item.diff.hasChanges ? "Grammar & Clarity" : "No Changes Needed");
+    item.confidence = metadata.confidence || "high";
     if (!item.diff.hasChanges) {
       item.status = "accepted";
+    } else {
+      item.status = "suggestion_ready";
     }
   }
   /**
@@ -448,6 +658,7 @@ var ReviewSession = class _ReviewSession {
    */
   accept(index) {
     if (this.items[index]) {
+      this.pushUndo(this.items[index]);
       this.items[index].status = "accepted";
       this.items[index].reviewedAt = Date.now();
     }
@@ -458,6 +669,7 @@ var ReviewSession = class _ReviewSession {
    */
   reject(index) {
     if (this.items[index]) {
+      this.pushUndo(this.items[index]);
       this.items[index].status = "rejected";
       this.items[index].reviewedAt = Date.now();
     }
@@ -469,6 +681,7 @@ var ReviewSession = class _ReviewSession {
    */
   manualEdit(index, customText) {
     if (this.items[index]) {
+      this.pushUndo(this.items[index]);
       this.items[index].customEdit = customText;
       this.items[index].status = "modified";
       this.items[index].diff = computeWordDiff(this.items[index].original, customText);
@@ -476,10 +689,96 @@ var ReviewSession = class _ReviewSession {
     }
   }
   /**
-   * Assembles the final markdown output based on accepted/rejected/modified states.
+   * Finds the next index of an item that is still pending or ready for review decision.
+   * @param {number} [fromIndex]
+   * @returns {number} Index of next pending item or -1
+   */
+  getNextPendingIndex(fromIndex = this.currentIndex) {
+    for (let i = fromIndex + 1; i < this.items.length; i++) {
+      const item = this.items[i];
+      if (item.isInspectable && (item.status === "pending" || item.status === "suggestion_ready")) {
+        return i;
+      }
+    }
+    for (let i = 0; i <= fromIndex; i++) {
+      const item = this.items[i];
+      if (item.isInspectable && (item.status === "pending" || item.status === "suggestion_ready")) {
+        return i;
+      }
+    }
+    return -1;
+  }
+  /**
+   * Finds the previous index of an item that is still pending or ready for review decision.
+   * @param {number} [fromIndex]
+   * @returns {number} Index of previous pending item or -1
+   */
+  getPrevPendingIndex(fromIndex = this.currentIndex) {
+    for (let i = fromIndex - 1; i >= 0; i--) {
+      const item = this.items[i];
+      if (item.isInspectable && (item.status === "pending" || item.status === "suggestion_ready")) {
+        return i;
+      }
+    }
+    for (let i = this.items.length - 1; i >= fromIndex; i--) {
+      const item = this.items[i];
+      if (item.isInspectable && (item.status === "pending" || item.status === "suggestion_ready")) {
+        return i;
+      }
+    }
+    return -1;
+  }
+  /**
+   * Assembles the final markdown output based on accepted/rejected/modified states,
+   * properly preserving paragraph spacing in sentence mode without introducing stray newlines.
    * @returns {string}
    */
   getReconstructedContent() {
+    if (this.granularity === GRANULARITY_MODES.SENTENCE) {
+      let result = "";
+      let paraSentences = [];
+      let currentParaId = null;
+      for (let i = 0; i < this.items.length; i++) {
+        const item = this.items[i];
+        let itemText = item.original;
+        if (item.status === "accepted") {
+          itemText = item.suggestion;
+        } else if (item.status === "modified" && item.customEdit !== null) {
+          itemText = item.customEdit;
+        }
+        if (item.type === "separator") {
+          if (paraSentences.length > 0) {
+            result += (result ? "\n" : "") + paraSentences.join(" ");
+            paraSentences = [];
+          }
+          result += "\n";
+          currentParaId = null;
+          continue;
+        }
+        const pId = item.parentParagraphId || item.id;
+        if (currentParaId !== null && currentParaId !== pId) {
+          if (paraSentences.length > 0) {
+            result += (result ? "\n" : "") + paraSentences.join(" ");
+            paraSentences = [];
+          }
+        }
+        currentParaId = pId;
+        if (itemText && itemText.trim().length > 0) {
+          paraSentences.push(itemText.trim());
+        }
+        if (item.isLastInParagraph) {
+          if (paraSentences.length > 0) {
+            result += (result ? "\n" : "") + paraSentences.join(" ");
+            paraSentences = [];
+          }
+          currentParaId = null;
+        }
+      }
+      if (paraSentences.length > 0) {
+        result += (result ? "\n" : "") + paraSentences.join(" ");
+      }
+      return result;
+    }
     return this.items.map((item) => {
       if (item.status === "accepted") {
         return item.suggestion;
@@ -505,7 +804,7 @@ var ReviewSession = class _ReviewSession {
   getMetrics() {
     const inspectable = this.items.filter((i) => i.isInspectable);
     const total = inspectable.length;
-    const reviewed = inspectable.filter((i) => i.status !== "pending").length;
+    const reviewed = inspectable.filter((i) => i.status !== "pending" && i.status !== "suggestion_ready").length;
     const accepted = inspectable.filter((i) => i.status === "accepted" || i.status === "modified").length;
     const rejected = inspectable.filter((i) => i.status === "rejected").length;
     let totalAdditions = 0;
@@ -1171,6 +1470,10 @@ function getPromptPreset(id) {
 }
 
 // anp-23-grammar-reviewer/lib/features/reviewWorkflow.js
+var isReviewAllCancelled = false;
+function cancelReviewAll() {
+  isReviewAllCancelled = true;
+}
 async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
   const session = getActiveSession();
   if (!session) {
@@ -1198,20 +1501,32 @@ async function handleRunReview(app, itemIndex = -1, promptOverride = "") {
     context: session.noteTitle,
     granularity: session.granularity
   });
-  const aiOutput = await provider.complete({
-    prompt: userPrompt,
-    systemPrompt,
-    model: session.model
-  });
-  session.setSuggestion(targetIdx, aiOutput);
-  return session;
+  const prevStatus = item.status;
+  item.status = "reviewing";
+  try {
+    const aiOutput = await provider.complete({
+      prompt: userPrompt,
+      systemPrompt,
+      model: session.model
+    });
+    session.setSuggestion(targetIdx, aiOutput);
+    return session;
+  } catch (err) {
+    item.status = prevStatus === "pending" ? "error" : prevStatus;
+    throw err;
+  }
 }
 async function handleReviewAll(app) {
   const session = getActiveSession();
   if (!session) return;
+  isReviewAllCancelled = false;
   for (let i = 0; i < session.items.length; i++) {
+    if (isReviewAllCancelled) {
+      console.log("[GrammarReviewer] Review All was cancelled by user.");
+      break;
+    }
     const item = session.items[i];
-    if (item.isInspectable && item.status === "pending") {
+    if (item.isInspectable && (item.status === "pending" || item.status === "error")) {
       try {
         await handleRunReview(app, i);
       } catch (err) {
@@ -1442,6 +1757,28 @@ async function handleSaveAndCommit(app, createAuditNotes = false) {
   const noteUUID = session.noteUUID;
   if (!noteUUID || typeof noteUUID !== "string") {
     throw new Error("Cannot save: Target note UUID is missing or invalid.");
+  }
+  if (typeof app.getNoteContent === "function") {
+    try {
+      const currentContent = await app.getNoteContent({ uuid: noteUUID });
+      if (currentContent && session.originalContent && currentContent.replace(/\r\n/g, "\n").trim() !== session.originalContent.replace(/\r\n/g, "\n").trim()) {
+        const proceed = await app.prompt("Warning: Note Modified Externally", {
+          inputs: [
+            {
+              label: "The source note was modified outside the reviewer. Overwrite with reviewed version?",
+              type: "checkbox",
+              value: true
+            }
+          ]
+        });
+        const isConfirmed = typeof proceed === "object" ? Boolean(proceed["The source note was modified outside the reviewer. Overwrite with reviewed version?"] ?? proceed[0]) : Boolean(proceed);
+        if (!isConfirmed) {
+          return { success: false, cancelled: true };
+        }
+      }
+    } catch (e) {
+      console.warn("[GrammarReviewer] Stale note check skipped:", e);
+    }
   }
   try {
     await app.replaceNoteContent({ uuid: noteUUID }, finalContent);
@@ -2102,11 +2439,57 @@ kbd {
 
 .gr-diff-header {
   background: rgba(0, 0, 0, 0.15);
-  padding: 12px 18px;
+  padding: 10px 16px;
   border-bottom: 1px solid var(--border-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gr-nav-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.gr-jump-selector-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gr-jump-label {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.gr-jump-select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  outline: none;
+  max-width: 220px;
+}
+.gr-jump-select:focus {
+  border-color: var(--border-active);
+}
+
+.gr-change-count-pill {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
 .gr-diff-badge {
@@ -2119,20 +2502,40 @@ kbd {
 }
 
 .badge-pending { background: #475569; color: #f8fafc; }
+.badge-suggestion_ready { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
 .badge-accepted { background: var(--accent-success-bg); color: var(--accent-success); border: 1px solid rgba(16,185,129,0.3); }
 .badge-rejected { background: var(--accent-danger-bg); color: var(--accent-danger); border: 1px solid rgba(239,68,68,0.3); }
-.badge-modified { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); }
+.badge-modified { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+.badge-error { background: var(--accent-danger-bg); color: var(--accent-danger); border: 1px solid rgba(239,68,68,0.4); }
+
+/* Diff Mode Bar */
+.gr-diff-mode-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 .gr-diff-body {
+  padding: 14px 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.gr-panes-wrapper {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  padding: 16px 18px;
+  gap: 14px;
   flex: 1;
 }
 
 @media (max-width: 768px) {
-  .gr-diff-body {
+  .gr-panes-wrapper {
     grid-template-columns: 1fr;
   }
 }
@@ -2156,15 +2559,15 @@ kbd {
 
 .gr-pane-content {
   background: var(--bg-primary);
-  padding: 18px;
+  padding: 16px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   font-size: 14px;
   font-family: var(--font-sans);
   white-space: pre-wrap;
-  min-height: 440px;
-  height: calc(100vh - 290px);
-  max-height: 750px;
+  min-height: 380px;
+  height: calc(100vh - 350px);
+  max-height: 700px;
   overflow-y: auto;
   line-height: 1.75;
   letter-spacing: 0.01em;
@@ -2213,6 +2616,137 @@ kbd {
   font-weight: 600;
 }
 
+/* Changes Only Mode View */
+.gr-changes-only-view {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  min-height: 380px;
+  height: calc(100vh - 350px);
+  max-height: 700px;
+  overflow-y: auto;
+}
+
+.gr-changes-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gr-changes-list-header {
+  font-size: 13px;
+  color: var(--text-primary);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.gr-changes-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.gr-change-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-card);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+
+.gr-change-num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.gr-change-type {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.badge-replace { background: rgba(59, 130, 246, 0.15); color: #60a5fa; }
+.badge-delete { background: var(--accent-danger-bg); color: #f87171; }
+.badge-insert { background: var(--accent-success-bg); color: #34d399; }
+
+.gr-change-del {
+  color: #f87171;
+  text-decoration: line-through;
+  font-family: var(--font-sans);
+}
+
+.gr-change-arrow {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.gr-change-ins {
+  color: #34d399;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+
+.gr-no-changes-msg {
+  color: var(--accent-success);
+  padding: 20px;
+  text-align: center;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* Teacher's Insight Box */
+.gr-teacher-insight-box {
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin: 0 16px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.gr-teacher-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.gr-category-badge {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.gr-confidence-badge {
+  background: var(--accent-success-bg);
+  color: var(--accent-success);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+
+.gr-teacher-body {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
 /* Diff View Switcher Pills */
 .gr-diff-view-switcher {
   display: inline-flex;
@@ -2227,9 +2761,9 @@ kbd {
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 3px;
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
@@ -2246,16 +2780,89 @@ kbd {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
+/* Top Loading Operation Bar */
+.gr-top-loader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 9999;
+  background: transparent;
+  overflow: hidden;
+  display: none;
+}
+
+.gr-top-loader.active {
+  display: block;
+  background: rgba(59, 130, 246, 0.2);
+}
+
+.gr-top-loader-bar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #3b82f6, #10b981, #a855f7, #3b82f6);
+  background-size: 200% 100%;
+  animation: grProgressSlide 1.5s infinite linear;
+}
+
+@keyframes grProgressSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.gr-op-banner {
+  background: rgba(59, 130, 246, 0.12);
+  border-bottom: 1px solid rgba(59, 130, 246, 0.25);
+  color: var(--text-primary);
+  font-size: 12px;
+  padding: 6px 16px;
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.gr-op-banner.active {
+  display: flex;
+}
+
+/* Status Pills */
+.gr-status-pill {
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gr-status-pill.success { background: var(--accent-success-bg); color: var(--accent-success); border: 1px solid rgba(16,185,129,0.3); }
+.gr-status-pill.danger { background: var(--accent-danger-bg); color: var(--accent-danger); border: 1px solid rgba(239,68,68,0.3); }
+.gr-status-pill.modified { background: rgba(245, 158, 11, 0.2); color: var(--accent-warning); border: 1px solid rgba(245, 158, 11, 0.3); }
+
 /* Buttons & Micro-interactions */
 .gr-actions-footer {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 18px;
+  padding: 10px 16px;
   background: rgba(0, 0, 0, 0.15);
   border-top: 1px solid var(--border-color);
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.gr-action-buttons-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.gr-nav-controls-group {
+  display: flex;
+  gap: 6px;
+  align-items: center;
 }
 
 .gr-btn {
@@ -2279,6 +2886,11 @@ kbd {
   transform: translateY(0);
 }
 
+.gr-btn.btn-sm {
+  padding: 5px 9px;
+  font-size: 11px;
+}
+
 .btn-primary { background: var(--accent-primary); color: #fff; }
 .btn-primary:hover { background: var(--accent-hover); }
 
@@ -2287,6 +2899,9 @@ kbd {
 
 .btn-danger { background: var(--bg-card); color: var(--accent-danger); border-color: rgba(239,68,68,0.3); }
 .btn-danger:hover { background: var(--accent-danger-bg); }
+
+.btn-warning { background: rgba(245, 158, 11, 0.15); color: var(--accent-warning); border-color: rgba(245, 158, 11, 0.4); }
+.btn-warning:hover { background: rgba(245, 158, 11, 0.25); }
 
 .btn-secondary { background: var(--bg-card); color: var(--text-primary); border-color: var(--border-color); }
 .btn-secondary:hover { background: var(--bg-card-hover); border-color: var(--border-active); }
@@ -2447,8 +3062,10 @@ kbd {
 function renderSidebarPanel(session, config, metrics) {
   const currentProvider = session?.provider || config.provider || PROVIDERS.OPENROUTER;
   const currentModel = session?.model || config.customModel || DEFAULT_MODELS[currentProvider] || "";
-  const currentGranularity = session?.granularity || "full";
+  const currentGranularity = session?.granularity || "paragraph";
   const currentPreset = session?.promptPresetId || "grammar_spelling";
+  const currentItem = session?.items?.[session.currentIndex];
+  const currentStatus = currentItem?.status || "pending";
   const savedProviders = Object.values(PROVIDERS).filter((p) => {
     if (p === PROVIDERS.OLLAMA) return true;
     const key = config?.allKeys?.[p];
@@ -2472,6 +3089,8 @@ function renderSidebarPanel(session, config, metrics) {
       </button>
     `;
   }).join("");
+  const pendingCount = metrics.pending ?? 0;
+  const reviewBtnLabel = getSidebarReviewBtnText(currentStatus);
   return `
   <aside class="gr-sidebar">
     
@@ -2498,12 +3117,12 @@ function renderSidebarPanel(session, config, metrics) {
         </div>
       </div>
 
-      <div class="gr-sidebar-btn-row" style="display: flex; gap: 8px; margin-top: 4px;">
+      <div class="gr-sidebar-btn-row" style="display: flex; gap: 8px; margin-top: 6px;">
         <button class="gr-btn btn-primary" style="flex: 1; justify-content: center;" onclick="sendAction('runReview')">
-          \u26A1 Review Item
+          ${reviewBtnLabel}
         </button>
-        <button class="gr-btn btn-secondary" style="padding: 8px 12px;" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
-          \u26A1 All
+        <button class="gr-btn btn-secondary" style="padding: 8px 12px; white-space: nowrap;" title="Review all pending chunks sequentially" onclick="sendAction('reviewAll')">
+          \u26A1 All Pending ${pendingCount > 0 ? `(${pendingCount})` : ""}
         </button>
       </div>
     </div>
@@ -2538,7 +3157,7 @@ function renderSidebarPanel(session, config, metrics) {
       ` : ""}
     </div>
 
-    <!-- Section 4: Review Progress -->
+    <!-- Section 4: Review Progress & Queue -->
     <div class="gr-sidebar-section">
       <div class="gr-sidebar-header" style="margin-bottom: 6px;">
         <span class="gr-section-title">PROGRESS</span>
@@ -2549,8 +3168,9 @@ function renderSidebarPanel(session, config, metrics) {
       <div class="gr-progress-track">
         <div class="gr-progress-fill" style="width: ${metrics.percentComplete}%;"></div>
       </div>
-      <div class="gr-metrics-row">
+      <div class="gr-metrics-row" style="margin-top: 6px; display: flex; justify-content: space-between; font-size: 11px;">
         <span style="color: var(--accent-success); font-weight: 600;">\u2713 ${metrics.accepted} Accepted</span>
+        <span style="color: var(--accent-warning); font-weight: 600;">\u25CB ${pendingCount} Pending</span>
         <span style="color: var(--accent-danger); font-weight: 600;">\u2717 ${metrics.rejected} Rejected</span>
       </div>
     </div>
@@ -2560,6 +3180,7 @@ function renderSidebarPanel(session, config, metrics) {
       <div style="font-size: 11px; color: var(--text-secondary); display: flex; flex-wrap: wrap; gap: 8px 12px; justify-content: center; align-items: center;">
         <span><kbd>A</kbd> Accept</span>
         <span><kbd>R</kbd> Reject</span>
+        <span><kbd>U</kbd> Undo</span>
         <span><kbd>N</kbd>/<kbd>P</kbd> Nav</span>
         <span><kbd>T</kbd> Theme</span>
       </div>
@@ -2568,90 +3189,304 @@ function renderSidebarPanel(session, config, metrics) {
   </aside>
   `;
 }
+function getSidebarReviewBtnText(status) {
+  switch (status) {
+    case "pending":
+      return "\u26A1 Review Item";
+    case "suggestion_ready":
+      return "\u{1F504} Re-Review Item";
+    case "accepted":
+      return "\u{1F504} Re-Review";
+    case "rejected":
+      return "\u{1F504} Re-Review";
+    case "modified":
+      return "\u{1F504} Re-Review";
+    default:
+      return "\u26A1 Review Item";
+  }
+}
 
 // anp-23-grammar-reviewer/lib/ui/diffViewComponent.js
-function renderDiffCard(item, index, total) {
+function renderDiffCard(item, index, total, session = null) {
   if (!item) {
     return `<div class="gr-empty-state">No item selected.</div>`;
   }
-  const badgeClass = `badge-${item.status || "pending"}`;
-  const statusLabel = (item.status || "pending").toUpperCase();
+  const status = item.status || "pending";
+  const badgeClass = `badge-${status}`;
+  const statusLabel = getStatusDisplayLabel(status);
   const leftPaneHtml = item.diff?.originalHtml || escapeHtml(item.original);
   const suggestedCleanHtml = item.diff?.suggestedHtml || escapeHtml(item.suggestion || item.original);
   const inlineDiffHtml = item.diff?.inlineHtml || suggestedCleanHtml;
+  const changesOnlyHtml = item.diff?.changesHtml || `<div class="gr-no-changes-msg">No changes.</div>`;
   const rawPlainHtml = escapeHtml(item.suggestion || item.original);
   const origWords = (item.original || "").trim().split(/\s+/).filter(Boolean).length;
   const suggWords = (item.suggestion || item.original || "").trim().split(/\s+/).filter(Boolean).length;
+  const changeCount = item.diff?.stats?.changeCount ?? 0;
+  const jumpOptionsHtml = (session?.items || []).map((it, idx) => {
+    const isCur = idx === index;
+    const itIcon = getItemStatusIcon(it.status);
+    const snippet = (it.original || "").trim().substring(0, 32) || `Item #${idx + 1}`;
+    return `<option value="${idx}" ${isCur ? "selected" : ""}>${itIcon} #${idx + 1}: ${escapeHtml(snippet)}...</option>`;
+  }).join("");
+  const prevPendingIdx = session ? session.getPrevPendingIndex(index) : -1;
+  const nextPendingIdx = session ? session.getNextPendingIndex(index) : -1;
+  const hasPendingItems = prevPendingIdx !== -1 || nextPendingIdx !== -1;
+  const canUndo = session ? session.canUndo(index) : false;
   return `
-  <div class="gr-diff-card active" data-index="${index}">
+  <div class="gr-diff-card active" data-index="${index}" data-status="${status}">
+    
+    <!-- Top Review Navigator Bar -->
     <div class="gr-diff-header">
+      <div class="gr-nav-bar-group">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <strong style="color: var(--text-primary); font-size: 13.5px;">Item #${index + 1} of ${total}</strong>
+          <span style="color: var(--text-secondary); font-size: 12px; text-transform: capitalize;">(${item.type})</span>
+        </div>
+
+        <!-- Jump to Item Selector -->
+        <div class="gr-jump-selector-container">
+          <label for="jump-item-select" class="gr-jump-label">Jump to:</label>
+          <select id="jump-item-select" class="gr-jump-select" onchange="sendAction('jumpToItem', parseInt(this.value, 10))">
+            ${jumpOptionsHtml}
+          </select>
+        </div>
+      </div>
+
       <div style="display: flex; align-items: center; gap: 8px;">
-        <strong style="color: var(--text-primary); font-size: 13.5px;">Item #${index + 1} of ${total}</strong>
-        <span style="color: var(--text-secondary); font-size: 12px; text-transform: capitalize;">(${item.type})</span>
-        <span style="color: var(--text-muted); font-size: 11px; display: inline-flex; align-items: center; gap: 4px;" title="Bidirectional scroll synchronization active">
-          \u{1F517} Sync Scroll
-        </span>
+        ${item.diff?.hasChanges ? `<span class="gr-change-count-pill">${changeCount} change${changeCount === 1 ? "" : "s"}</span>` : ""}
+        <span class="gr-diff-badge ${badgeClass}">${statusLabel}</span>
       </div>
-      <span class="gr-diff-badge ${badgeClass}">${statusLabel}</span>
     </div>
 
-    <div class="gr-diff-body">
-      <!-- Left Pane: Original Draft -->
-      <div class="gr-pane">
-        <div class="gr-pane-title">
-          <span>\u{1F4C4} Original Draft</span>
-          <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${origWords} words</span>
-        </div>
-        <div class="gr-pane-content" id="original-pane-${index}">${leftPaneHtml}</div>
+    <!-- Mode Switcher Tabs (Clean Prose, Inline Diff, Side-by-Side, Changes Only) -->
+    <div class="gr-diff-mode-bar">
+      <div class="gr-diff-view-switcher">
+        <button class="gr-view-toggle-btn active" id="btn-view-clean-${index}" onclick="setDiffViewMode(${index}, 'clean')">\u2728 Clean Prose</button>
+        <button class="gr-view-toggle-btn" id="btn-view-inline-${index}" onclick="setDiffViewMode(${index}, 'inline')">\u{1F500} Inline Diff</button>
+        <button class="gr-view-toggle-btn" id="btn-view-side-${index}" onclick="setDiffViewMode(${index}, 'side')">\u{1F465} Side-by-Side</button>
+        <button class="gr-view-toggle-btn" id="btn-view-changes-${index}" onclick="setDiffViewMode(${index}, 'changes')">\u{1F4CB} Changes Only (${changeCount})</button>
       </div>
 
-      <!-- Right Pane: AI Suggestion with View Switcher -->
-      <div class="gr-pane">
-        <div class="gr-pane-title">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span>\u2728 AI Suggestion</span>
-            <div class="gr-diff-view-switcher">
-              <button class="gr-view-toggle-btn active" id="btn-view-clean-${index}" onclick="setDiffViewMode(${index}, 'clean')">Clean Prose</button>
-              <button class="gr-view-toggle-btn" id="btn-view-inline-${index}" onclick="setDiffViewMode(${index}, 'inline')">Inline Diff</button>
-            </div>
+      <div style="font-size: 11.5px; color: var(--text-muted); font-family: var(--font-mono); display: flex; gap: 12px;">
+        <span>Original: <strong>${origWords}</strong>w</span>
+        <span>Suggested: <strong>${suggWords}</strong>w</span>
+      </div>
+    </div>
+
+    <!-- Main Diff Workspace -->
+    <div class="gr-diff-body" id="diff-body-${index}">
+      
+      <!-- Dual Pane Container for Clean, Inline, Side-by-Side -->
+      <div class="gr-panes-wrapper" id="panes-wrapper-${index}">
+        <!-- Left Pane: Original Draft -->
+        <div class="gr-pane" id="original-pane-wrapper-${index}">
+          <div class="gr-pane-title">
+            <span>\u{1F4C4} Original Draft</span>
+            <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${origWords} words</span>
           </div>
-          <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${suggWords} words</span>
+          <div class="gr-pane-content" id="original-pane-${index}">${leftPaneHtml}</div>
         </div>
-        
-        <!-- Pre-encoded diff content payloads for 0ms client-side mode switching -->
-        <div class="gr-pane-content" id="suggestion-pane-${index}" 
-             data-clean="${escapeDataAttr(suggestedCleanHtml)}"
-             data-inline="${escapeDataAttr(inlineDiffHtml)}"
-             data-plain="${escapeDataAttr(rawPlainHtml)}">${suggestedCleanHtml}</div>
+
+        <!-- Right Pane: AI Suggestion / Unified Inline -->
+        <div class="gr-pane" id="suggestion-pane-wrapper-${index}">
+          <div class="gr-pane-title">
+            <span id="suggestion-pane-label-${index}">\u2728 AI Suggestion</span>
+            <span style="font-weight: 500; font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted);">${suggWords} words</span>
+          </div>
+          
+          <div class="gr-pane-content" id="suggestion-pane-${index}" 
+               data-clean="${escapeDataAttr(suggestedCleanHtml)}"
+               data-inline="${escapeDataAttr(inlineDiffHtml)}"
+               data-side="${escapeDataAttr(suggestedCleanHtml)}"
+               data-changes="${escapeDataAttr(changesOnlyHtml)}"
+               data-plain="${escapeDataAttr(rawPlainHtml)}">${suggestedCleanHtml}</div>
+        </div>
       </div>
+
+      <!-- Changes Only Dedicated View (Initially Hidden) -->
+      <div class="gr-changes-only-view" id="changes-only-view-${index}" style="display: none;">
+        ${changesOnlyHtml}
+      </div>
+
     </div>
 
+    <!-- Teacher's Insight / Explanation Box (Visible when suggestions are available) -->
+    ${renderTeacherInsightCard(item, changeCount)}
+
+    <!-- State-Aware Actions Footer -->
     <div class="gr-actions-footer">
-      <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-        <button class="gr-btn btn-success" onclick="sendAction('acceptItem', ${index})">
-          \u2713 Accept <kbd style="margin-left: 4px; background: rgba(0,0,0,0.2); border: none; color: #fff;">A</kbd>
-        </button>
-        <button class="gr-btn btn-danger" onclick="sendAction('rejectItem', ${index})">
-          \u2717 Reject <kbd style="margin-left: 4px; background: rgba(0,0,0,0.2); border: none; color: inherit;">R</kbd>
-        </button>
-        <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
-          \u270F\uFE0F Edit
-        </button>
-        <button class="gr-btn btn-secondary" onclick="sendAction('reReviewItem', ${index})">
-          \u{1F504} Re-Review
-        </button>
+      <div class="gr-action-buttons-group">
+        ${renderStateAwareActionButtons(item, index, canUndo)}
       </div>
 
-      <div style="display: flex; gap: 8px; align-items: center;">
+      <!-- Navigation Step Controls with Pending Skip Helpers -->
+      <div class="gr-nav-controls-group">
+        ${hasPendingItems ? `
+          <button class="gr-btn btn-secondary btn-sm" title="Jump to previous unreviewed item" onclick="sendAction('jumpToItem', ${prevPendingIdx})" ${prevPendingIdx === -1 ? "disabled style='opacity: 0.4; cursor: not-allowed;'" : ""}>
+            \u23EE Prev Pending
+          </button>
+        ` : ""}
+        
         <button class="gr-btn btn-secondary" onclick="sendAction('prevItem')" ${index === 0 ? "disabled style='opacity: 0.5; cursor: not-allowed;'" : ""}>
           \u2190 Previous
         </button>
         <button class="gr-btn btn-secondary" onclick="sendAction('nextItem')" ${index >= total - 1 ? "disabled style='opacity: 0.5; cursor: not-allowed;'" : ""}>
           Next \u2192
         </button>
+
+        ${hasPendingItems ? `
+          <button class="gr-btn btn-secondary btn-sm" title="Jump to next unreviewed item" onclick="sendAction('jumpToItem', ${nextPendingIdx})" ${nextPendingIdx === -1 ? "disabled style='opacity: 0.4; cursor: not-allowed;'" : ""}>
+            Next Pending \u23ED
+          </button>
+        ` : ""}
       </div>
     </div>
+
   </div>
+  `;
+}
+function getStatusDisplayLabel(status) {
+  switch (status) {
+    case "accepted":
+      return "\u2713 ACCEPTED";
+    case "rejected":
+      return "\u2717 REJECTED";
+    case "modified":
+      return "\u270E EDITED";
+    case "suggestion_ready":
+      return "\u25CF SUGGESTION READY";
+    case "reviewing":
+      return "\u23F3 REVIEWING...";
+    case "error":
+      return "\u26A0\uFE0F ERROR";
+    default:
+      return "\u25CB PENDING";
+  }
+}
+function getItemStatusIcon(status) {
+  switch (status) {
+    case "accepted":
+      return "\u2713";
+    case "rejected":
+      return "\u2715";
+    case "modified":
+      return "\u270E";
+    case "suggestion_ready":
+      return "\u25CF";
+    case "error":
+      return "\u26A0";
+    default:
+      return "\u25CB";
+  }
+}
+function renderTeacherInsightCard(item, changeCount) {
+  if (!item.diff || !item.diff.hasChanges) {
+    return "";
+  }
+  const category = item.category || "Grammar, Punctuation & Clarity";
+  const confidence = item.confidence || "High";
+  const explanation = item.explanation || `Elevated readability and flow across ${changeCount} phrase${changeCount === 1 ? "" : "s"} while maintaining the original tone.`;
+  return `
+    <div class="gr-teacher-insight-box">
+      <div class="gr-teacher-header">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 15px;">\u{1F9D1}\u200D\u{1F3EB}</span>
+          <strong style="color: var(--text-primary); font-size: 12.5px;">Teacher's Insight</strong>
+        </div>
+        <div style="display: flex; gap: 6px; align-items: center;">
+          <span class="gr-category-badge">${escapeHtml(category)}</span>
+          <span class="gr-confidence-badge">${escapeHtml(confidence)} Confidence</span>
+        </div>
+      </div>
+      <div class="gr-teacher-body">
+        ${escapeHtml(explanation)}
+      </div>
+    </div>
+  `;
+}
+function renderStateAwareActionButtons(item, index, canUndo) {
+  const status = item.status || "pending";
+  if (status === "pending") {
+    return `
+      <button class="gr-btn btn-primary" onclick="sendAction('runReview', ${index})">
+        \u26A1 Review This Item
+      </button>
+      <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+        \u270F\uFE0F Manual Edit
+      </button>
+    `;
+  }
+  if (status === "suggestion_ready") {
+    return `
+      <button class="gr-btn btn-success" onclick="sendAction('acceptItem', ${index})">
+        \u2713 Accept <kbd style="margin-left: 4px; background: rgba(0,0,0,0.2); border: none; color: #fff;">A</kbd>
+      </button>
+      <button class="gr-btn btn-danger" onclick="sendAction('rejectItem', ${index})">
+        \u2717 Reject <kbd style="margin-left: 4px; background: rgba(0,0,0,0.2); border: none; color: inherit;">R</kbd>
+      </button>
+      <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+        \u270F\uFE0F Edit
+      </button>
+      <button class="gr-btn btn-secondary" onclick="openReReviewDialog(${index})">
+        \u{1F504} Re-Review
+      </button>
+    `;
+  }
+  if (status === "accepted") {
+    return `
+      <span class="gr-status-pill success">\u2713 Accepted</span>
+      ${canUndo ? `
+        <button class="gr-btn btn-warning" onclick="sendAction('undoItem', ${index})" title="Revert decision">
+          \u21A9 Undo
+        </button>
+      ` : ""}
+      <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+        \u270F\uFE0F Edit
+      </button>
+      <button class="gr-btn btn-secondary" onclick="openReReviewDialog(${index})">
+        \u{1F504} Re-Review
+      </button>
+    `;
+  }
+  if (status === "rejected") {
+    return `
+      <span class="gr-status-pill danger">\u2717 Kept Original</span>
+      ${canUndo ? `
+        <button class="gr-btn btn-warning" onclick="sendAction('undoItem', ${index})" title="Restore AI suggestion">
+          \u21A9 Undo
+        </button>
+      ` : ""}
+      <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+        \u270F\uFE0F Edit
+      </button>
+      <button class="gr-btn btn-secondary" onclick="openReReviewDialog(${index})">
+        \u{1F504} Re-Review
+      </button>
+    `;
+  }
+  if (status === "modified") {
+    return `
+      <span class="gr-status-pill modified">\u270E Manually Edited</span>
+      ${canUndo ? `
+        <button class="gr-btn btn-warning" onclick="sendAction('undoItem', ${index})" title="Discard manual edit">
+          \u21A9 Discard Edit
+        </button>
+      ` : ""}
+      <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+        \u270F\uFE0F Re-Edit
+      </button>
+      <button class="gr-btn btn-secondary" onclick="openReReviewDialog(${index})">
+        \u{1F504} Re-Review
+      </button>
+    `;
+  }
+  return `
+    <button class="gr-btn btn-primary" onclick="sendAction('runReview', ${index})">
+      \u26A0\uFE0F Retry Review
+    </button>
+    <button class="gr-btn btn-secondary" onclick="promptManualEdit(${index})">
+      \u270F\uFE0F Manual Edit
+    </button>
   `;
 }
 function escapeDataAttr(htmlStr) {
@@ -2661,7 +3496,7 @@ function escapeDataAttr(htmlStr) {
 
 // anp-23-grammar-reviewer/lib/ui/dashboardTemplate.js
 function buildDashboardTemplate({ session, config, historyRecords = [], activeTab = "review", activeTheme = "midnight" }) {
-  const metrics = session ? session.getMetrics() : { total: 0, reviewed: 0, accepted: 0, rejected: 0, percentComplete: 0 };
+  const metrics = session ? session.getMetrics() : { total: 0, reviewed: 0, accepted: 0, rejected: 0, percentComplete: 0, pending: 0 };
   const currentItem = session?.items?.[session.currentIndex] || null;
   const serializedSession = session ? JSON.stringify(session.toJSON()) : "null";
   return `
@@ -2676,6 +3511,17 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
   </style>
 </head>
 <body>
+  
+  <!-- Global Top Operation Progress Bar & Live Banner -->
+  <div id="top-loader" class="gr-top-loader"><div class="gr-top-loader-bar"></div></div>
+  <div id="op-banner" class="gr-op-banner">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span>\u26A1</span>
+      <span id="op-banner-text">AI is reviewing your writing...</span>
+    </div>
+    <button class="gr-btn btn-danger btn-sm" onclick="cancelActiveOperation()">Stop Review</button>
+  </div>
+
   <div class="gr-container">
     
     <!-- Top Navigation Header -->
@@ -2735,6 +3581,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     const THEMES = ${JSON.stringify(THEMES)};
     const MODEL_CATALOG = ${JSON.stringify(MODEL_CATALOG)};
     const PROVIDER_DOCS = ${JSON.stringify(PROVIDER_DOCS)};
+    const RE_REVIEW_REASONS = ${JSON.stringify(RE_REVIEW_REASONS)};
     const STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_SESSION_STATE";
     const THEME_STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_ACTIVE_THEME";
     const TAB_STORAGE_KEY = "ANP_GRAMMAR_REVIEWER_ACTIVE_TAB";
@@ -2787,6 +3634,82 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       }
     } catch (e) {}
 
+    // Top Operation Loader state management
+    function setTopLoading(isLoading, label = "AI is reviewing your note...") {
+      const loader = document.getElementById("top-loader");
+      const banner = document.getElementById("op-banner");
+      const bannerText = document.getElementById("op-banner-text");
+
+      if (loader) loader.classList.toggle("active", isLoading);
+      if (banner) banner.classList.toggle("active", isLoading);
+      if (bannerText && label) bannerText.innerText = label;
+    }
+
+    function cancelActiveOperation() {
+      setTopLoading(false);
+      sendAction("cancelReviewAll");
+    }
+
+    // Re-Review with reason picker
+    function openReReviewDialog(index) {
+      const reasons = RE_REVIEW_REASONS;
+      const optionsText = reasons.map((r, i) => (i + 1) + ". " + r.label).join("\\n");
+      const choice = prompt("Why are you re-reviewing Item #" + (index + 1) + "?\\n\\n" + optionsText + "\\n\\nEnter number (1-" + reasons.length + "):", "1");
+      if (!choice) return;
+
+      const num = parseInt(choice.trim(), 10);
+      if (num >= 1 && num <= reasons.length) {
+        const selected = reasons[num - 1];
+        let instruction = selected.prompt;
+        if (selected.id === "custom") {
+          const custom = prompt("Enter specific editing guidance for AI:");
+          if (!custom || !custom.trim()) return;
+          instruction = custom.trim();
+        }
+        setTopLoading(true, "Re-reviewing Item #" + (index + 1) + " (" + selected.label + ")...");
+        sendAction("reReviewItem", index, instruction);
+      }
+    }
+
+    // 4 Diff View Modes (Clean Prose, Inline Diff, Side-by-Side, Changes Only)
+    function setDiffViewMode(index, mode) {
+      const panesWrapper = document.getElementById("panes-wrapper-" + index);
+      const changesView = document.getElementById("changes-only-view-" + index);
+      const suggestionPane = document.getElementById("suggestion-pane-" + index);
+      const suggestionLabel = document.getElementById("suggestion-pane-label-" + index);
+
+      ["clean", "inline", "side", "changes"].forEach(m => {
+        const btn = document.getElementById("btn-view-" + m + "-" + index);
+        if (btn) btn.classList.toggle("active", m === mode);
+      });
+
+      if (mode === "changes") {
+        if (panesWrapper) panesWrapper.style.display = "none";
+        if (changesView) changesView.style.display = "block";
+        return;
+      }
+
+      if (panesWrapper) panesWrapper.style.display = "grid";
+      if (changesView) changesView.style.display = "none";
+
+      if (!suggestionPane) return;
+
+      const cleanHtml = decodeURIComponent(suggestionPane.getAttribute("data-clean") || "");
+      const inlineHtml = decodeURIComponent(suggestionPane.getAttribute("data-inline") || "");
+      const sideHtml = decodeURIComponent(suggestionPane.getAttribute("data-side") || "");
+
+      if (mode === "inline") {
+        suggestionPane.innerHTML = inlineHtml;
+        if (suggestionLabel) suggestionLabel.innerText = "\u{1F500} Unified Inline Diff";
+      } else if (mode === "side") {
+        suggestionPane.innerHTML = sideHtml;
+        if (suggestionLabel) suggestionLabel.innerText = "\u{1F465} Side-by-Side (Suggested)";
+      } else {
+        suggestionPane.innerHTML = cleanHtml;
+        if (suggestionLabel) suggestionLabel.innerText = "\u2728 AI Clean Prose";
+      }
+    }
+
     // Audit Report Notes Setting (Off by default)
     const AUDIT_STORAGE_KEY = "ANP_GRAMMAR_CREATE_AUDIT_NOTES";
 
@@ -2820,7 +3743,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     // Initialize audit checkbox state
     syncAuditCheckboxes();
 
-    // Keyboard Shortcuts
+    // Keyboard Shortcuts (A Accept, R Reject, U Undo, N/P Nav, T Theme)
     window.addEventListener("keydown", (e) => {
       if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) return;
 
@@ -2837,6 +3760,12 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         if (activeCard) {
           const idx = parseInt(activeCard.getAttribute("data-index"), 10);
           if (!isNaN(idx)) sendAction("rejectItem", idx);
+        }
+      } else if (e.key === "u" || e.key === "U" || (e.ctrlKey && e.key === "z")) {
+        const activeCard = document.querySelector(".gr-diff-card.active");
+        if (activeCard) {
+          const idx = parseInt(activeCard.getAttribute("data-index"), 10);
+          if (!isNaN(idx)) sendAction("undoItem", idx);
         }
       } else if (e.key === "n" || e.key === "N" || e.key === "ArrowRight") {
         sendAction("nextItem");
@@ -2867,10 +3796,17 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
     }
 
     async function sendAction(action, ...args) {
+      if (action === "runReview" || action === "reviewAll") {
+        setTopLoading(true, action === "reviewAll" ? "Sequential AI Review of all pending chunks in progress..." : "AI Review in progress...");
+      }
+
       if (typeof window.callAmplenotePlugin === "function") {
         try {
-          return await window.callAmplenotePlugin(action, ...args);
+          const res = await window.callAmplenotePlugin(action, ...args);
+          setTopLoading(false);
+          return res;
         } catch (err) {
+          setTopLoading(false);
           console.error("[GrammarReviewer] callAmplenotePlugin failed:", err);
         }
       }
@@ -2893,27 +3829,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       }
     }
 
-    function setDiffViewMode(index, mode) {
-      const pane = document.getElementById("suggestion-pane-" + index);
-      if (!pane) return;
-
-      const cleanHtml = decodeURIComponent(pane.getAttribute("data-clean") || "");
-      const inlineHtml = decodeURIComponent(pane.getAttribute("data-inline") || "");
-
-      if (mode === "inline") {
-        pane.innerHTML = inlineHtml;
-      } else {
-        pane.innerHTML = cleanHtml;
-      }
-
-      const btnClean = document.getElementById("btn-view-clean-" + index);
-      const btnInline = document.getElementById("btn-view-inline-" + index);
-
-      if (btnClean) btnClean.classList.toggle("active", mode === "clean");
-      if (btnInline) btnInline.classList.toggle("active", mode === "inline");
-    }
-
-    // Synchronized Scrolling for Dual-Pane Diff View (Full Note & Paragraphs)
+    // Synchronized Scrolling for Dual-Pane Diff View
     function initScrollSync() {
       const activeCard = document.querySelector(".gr-diff-card.active");
       if (!activeCard) return;
@@ -2958,7 +3874,7 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       };
     }
 
-    // Initialize Scroll Sync on DOM Load
+    // Initialize Scroll Sync
     initScrollSync();
 
     function promptCustomInstruction() {
@@ -3021,7 +3937,6 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       const titleElem = document.getElementById("settings-provider-title");
       if (titleElem) titleElem.innerText = providerKey;
 
-      // Update card active highlights
       document.querySelectorAll(".gr-provider-card").forEach(card => {
         card.classList.toggle("active", card.getAttribute("data-key") === providerKey);
       });
@@ -3033,13 +3948,11 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
       if (apiKeyGroup) apiKeyGroup.style.display = isOllama ? "none" : "flex";
       if (baseUrlGroup) baseUrlGroup.style.display = isOllama ? "flex" : "none";
 
-      // Update API Key Doc Link and Label
       const keyLabel = document.getElementById("settings-api-key-label");
       const keyLink = document.getElementById("settings-doc-link");
       if (keyLabel) keyLabel.innerText = providerKey + " API Key";
       if (keyLink && PROVIDER_DOCS[providerKey]) keyLink.href = PROVIDER_DOCS[providerKey];
 
-      // Update Key Input and Saved Preview Banner
       const keyInput = document.getElementById("settings-api-key");
       const previewBanner = document.getElementById("key-preview-banner");
       const savedKey = ALL_SAVED_KEYS[providerKey] || "";
@@ -3059,7 +3972,6 @@ function buildDashboardTemplate({ session, config, historyRecords = [], activeTa
         }
       }
 
-      // Update Model Dropdown options instantly based on THAT provider's saved model
       const modelSelect = document.getElementById("settings-model-select");
       const customGroup = document.getElementById("custom-model-input-group");
       const customInput = document.getElementById("settings-model");
@@ -3148,13 +4060,13 @@ function renderReviewWorkspace(session, config, metrics, currentItem) {
       ${renderSidebarPanel(session, config, metrics)}
 
       <main class="gr-main-canvas">
-        ${renderDiffCard(currentItem, session.currentIndex, session.items.length)}
+        ${renderDiffCard(currentItem, session.currentIndex, session.items.length, session)}
 
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 6px; flex-wrap: wrap; gap: 10px;">
           <div style="font-size: 12px; color: var(--text-secondary);">
-            \u{1F4A1} <strong>Shortcuts:</strong> <code>A</code> Accept \xB7 <code>R</code> Reject \xB7 <code>N/P</code> Next/Prev \xB7 <code>T</code> Theme
+            \u{1F4A1} <strong>Shortcuts:</strong> <code>A</code> Accept \xB7 <code>R</code> Reject \xB7 <code>U</code> Undo \xB7 <code>N/P</code> Nav \xB7 <code>T</code> Theme
           </div>
-          <button class="gr-btn btn-save" style="padding: 10px 24px; font-size: 13px;" onclick="handleSaveButtonClick()">
+          <button class="gr-btn btn-save" onclick="handleSaveButtonClick()">
             \u{1F4BE} Save & Commit Rewrites to Note
           </button>
         </div>
@@ -3519,11 +4431,29 @@ var plugin = {
           }
           break;
         case "runReview":
-          await handleRunReview(app);
+          await handleRunReview(app, typeof args[1] === "number" ? args[1] : -1, args[2] || "");
           break;
         case "reviewAll":
           await handleReviewAll(app);
           break;
+        case "cancelReviewAll":
+          cancelReviewAll();
+          requiresReRender = false;
+          break;
+        case "jumpToItem": {
+          const target = parseInt(args[1], 10);
+          if (session && !isNaN(target) && target >= 0 && target < session.items.length) {
+            session.currentIndex = target;
+          }
+          break;
+        }
+        case "undoItem": {
+          const target = typeof args[1] === "number" ? args[1] : session?.currentIndex;
+          if (session && target !== void 0) {
+            session.undo(target);
+          }
+          break;
+        }
         case "acceptItem":
           if (session) {
             session.accept(args[1]);
@@ -3546,7 +4476,7 @@ var plugin = {
           }
           break;
         case "reReviewItem":
-          await handleRunReview(app, args[1]);
+          await handleRunReview(app, args[1], args[2] || "");
           break;
         case "nextItem":
           if (session && session.currentIndex < session.items.length - 1) {

@@ -1,8 +1,15 @@
+/**
+ * @file grammar-reviewer.js
+ * @description Main entry point for the Amplenote Grammar & Style Reviewer Plugin.
+ * Provides noteOption and appOption dashboard launchers, embed event dispatchers (onEmbedCall),
+ * and full-screen reactive review interface rendering (renderEmbed).
+ */
+
 import { getActiveSession, setActiveSession, clearActiveSession } from "./lib/data/store.js";
 import { ReviewSession } from "./lib/engine/reviewSession.js";
 import { getProviderConfig } from "./lib/providers/providerRegistry.js";
 import { launchReviewer } from "./lib/features/launcher.js";
-import { handleRunReview, handleReviewAll, handleSetGranularity } from "./lib/features/reviewWorkflow.js";
+import { handleRunReview, handleReviewAll, handleSetGranularity, cancelReviewAll } from "./lib/features/reviewWorkflow.js";
 import { handleSaveAndCommit } from "./lib/features/saveHandler.js";
 import { loadHistoryRecords } from "./lib/features/historyViewer.js";
 import { buildDashboardTemplate } from "./lib/ui/dashboardTemplate.js";
@@ -193,12 +200,33 @@ const plugin = {
           break;
 
         case "runReview":
-          await handleRunReview(app);
+          await handleRunReview(app, typeof args[1] === "number" ? args[1] : -1, args[2] || "");
           break;
 
         case "reviewAll":
           await handleReviewAll(app);
           break;
+
+        case "cancelReviewAll":
+          cancelReviewAll();
+          requiresReRender = false;
+          break;
+
+        case "jumpToItem": {
+          const target = parseInt(args[1], 10);
+          if (session && !isNaN(target) && target >= 0 && target < session.items.length) {
+            session.currentIndex = target;
+          }
+          break;
+        }
+
+        case "undoItem": {
+          const target = typeof args[1] === "number" ? args[1] : session?.currentIndex;
+          if (session && target !== undefined) {
+            session.undo(target);
+          }
+          break;
+        }
 
         case "acceptItem":
           if (session) {
@@ -225,7 +253,7 @@ const plugin = {
           break;
 
         case "reReviewItem":
-          await handleRunReview(app, args[1]);
+          await handleRunReview(app, args[1], args[2] || "");
           break;
 
         case "nextItem":
