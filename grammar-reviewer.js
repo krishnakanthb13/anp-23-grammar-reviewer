@@ -6,8 +6,28 @@ import { handleRunReview, handleReviewAll, handleSetGranularity } from "./lib/fe
 import { handleSaveAndCommit } from "./lib/features/saveHandler.js";
 import { loadHistoryRecords } from "./lib/features/historyViewer.js";
 import { buildDashboardTemplate } from "./lib/ui/dashboardTemplate.js";
+import { DEFAULT_MODELS, DEFAULT_PROVIDER } from "./lib/constants.js";
 
 let activeTabState = "review";
+
+/**
+ * Safely parses the custom AI model setting JSON dictionary.
+ * @param {string} [rawSetting]
+ * @returns {Record<string, string>}
+ */
+function parseCustomModelSetting(rawSetting) {
+  if (!rawSetting || typeof rawSetting !== "string") return {};
+  const trimmed = rawSetting.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === "object" && parsed !== null ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 
 const plugin = {
   // App-level action: launches Grammar Reviewer across notes
@@ -91,13 +111,7 @@ const plugin = {
 
             // Persist model selection per-provider into existing Custom AI Model setting as JSON
             if (targetProvider && customModel !== undefined) {
-              let modelMap = {};
-              try {
-                const rawModelSetting = app.settings?.["Custom AI Model"];
-                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
-                  modelMap = JSON.parse(rawModelSetting);
-                }
-              } catch (e) {}
+              const modelMap = parseCustomModelSetting(app.settings?.["Custom AI Model"]);
               modelMap[targetProvider] = customModel.trim();
               await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }
@@ -129,16 +143,8 @@ const plugin = {
         case "setProvider": {
           const newProvider = args[1];
           if (newProvider) {
-            let savedModelForNewProvider = DEFAULT_MODELS[newProvider] || "";
-            try {
-              const rawModelSetting = app.settings?.["Custom AI Model"];
-              if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
-                const parsed = JSON.parse(rawModelSetting);
-                if (parsed[newProvider]) {
-                  savedModelForNewProvider = parsed[newProvider];
-                }
-              }
-            } catch (e) {}
+            const savedModels = parseCustomModelSetting(app.settings?.["Custom AI Model"]);
+            const savedModelForNewProvider = savedModels[newProvider] || DEFAULT_MODELS[newProvider] || "";
 
             if (session) {
               session.provider = newProvider;
@@ -159,13 +165,7 @@ const plugin = {
               session.model = newModel;
             }
             if (typeof app.setSetting === "function") {
-              let modelMap = {};
-              try {
-                const rawModelSetting = app.settings?.["Custom AI Model"];
-                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
-                  modelMap = JSON.parse(rawModelSetting);
-                }
-              } catch (e) {}
+              const modelMap = parseCustomModelSetting(app.settings?.["Custom AI Model"]);
               modelMap[curProvider] = newModel.trim();
               await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }

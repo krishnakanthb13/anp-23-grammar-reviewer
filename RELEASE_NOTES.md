@@ -1,5 +1,18 @@
 # Release Notes: Amplenote Grammar & Style Reviewer
 
+## v0.0.4 (2026-08-20)
+
+### ⚡ Performance & Optimization
+- **Linear-Time Diff Reconstruction**: Optimized token diff reconstruction in `diffEngine.js` from $O(k^2)$ `unshift` to $O(k)$ `push` + `reverse`, providing immediate performance gains on long document diffs.
+- **CRLF Line-Ending Normalization**: Pre-normalized Windows `\r\n` line endings to `\n` in `tokenizer.js` to prevent carriage-return corruption and ensure consistent diffing across platforms.
+
+### 🛡️ Hardening & Error Handling
+- **Save Handler Validation**: Added explicit `noteUUID` existence checks and wrapped `app.replaceNoteContent` with descriptive error propagation in `saveHandler.js`.
+- **Safe JSON Setting Parser**: Centralized `safeParseJSON` in `providerRegistry.js` and `parseCustomModelSetting` in `grammar-reviewer.js` for safe, fallback-resilient model dictionary parsing.
+- **Import Integrity**: Imported `DEFAULT_MODELS` and `DEFAULT_PROVIDER` into `grammar-reviewer.js` to safeguard settings persistence and model fallback branches.
+
+---
+
 ## v0.0.3 (2026-08-20)
 
 ### 🚀 New Features

@@ -45,20 +45,20 @@ graph TD
 ## 2. Core Modules
 
 ### `lib/engine/`
-- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected states, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence. Defaults to `Full Note` mode.
-- **`tokenizer.js`**: Breaks Markdown text into inspectable units (`full`, `paragraph`, `sentence`) while preserving empty lines, markdown code fences, headers, and bullet structures.
-- **`diffEngine.js`**: Fine-grained sub-word and punctuation LCS/Myers diff algorithm generating `originalHtml` (deletions in red), `suggestedHtml` (clean readable prose with green insertions), and `inlineHtml` (interleaved diff).
+- **`reviewSession.js`**: State container managing the active document, tokenized items, current index, accepted/rejected states, metrics, and JSON serialization (`toJSON()` / `fromJSON()`) for `localStorage` persistence. Defaults to `Full Note` mode. Fully annotated with comprehensive JSDoc contracts.
+- **`tokenizer.js`**: Breaks Markdown text into inspectable units (`full`, `paragraph`, `sentence`) while preserving empty lines, markdown code fences, headers, and bullet structures. Automatically normalizes CRLF (`\r\n`) line endings upfront.
+- **`diffEngine.js`**: Fine-grained sub-word and punctuation LCS/Myers diff algorithm generating `originalHtml` (deletions in red), `suggestedHtml` (clean readable prose with green insertions), and `inlineHtml` (interleaved diff). Optimized for linear-time $O(k)$ diff reconstruction.
 - **`promptPresets.js`**: Pre-configured system and user prompts for tone, conciseness, flow, humor, and grammar corrections.
 
 ### `lib/features/`
 - **`launcher.js`**: Direct 1-click fullscreen launcher that automatically resolves and remembers the `Last Opened Note UUID` across sessions.
 - **`reviewWorkflow.js`**: AI completion runner with isolated endpoint routing for cloud vs Ollama providers.
-- **`saveHandler.js`**: Overwrites source note directly and optionally generates human-readable changes reports and JSON history notes when audit logging is enabled.
+- **`saveHandler.js`**: Overwrites source note directly with note UUID validation and error handling; optionally generates human-readable changes reports and JSON history notes when audit logging is enabled.
 - **`historyViewer.js`**: Multi-query history fetcher querying and deduplicating past review sessions.
 
 ### `lib/providers/`
-- **`baseProvider.js`**: Abstract base class enforcing standard `complete({ prompt, systemPrompt, model })` signature with localhost/CORS error extraction.
-- **`providerRegistry.js`**: Factory instantiating adapters for **OpenRouter, Gemini, Groq, Mistral, DeepSeek, Ollama, OpenAI, and Anthropic**. Extracts per-provider keys and model maps (JSON dictionary) without requiring extra setting rows.
+- **`baseProvider.js`**: Abstract base class enforcing standard `complete({ prompt, systemPrompt, model })` signature with localhost/CORS error extraction and timeout controls.
+- **`providerRegistry.js`**: Factory instantiating adapters for **OpenRouter, Gemini, Groq, Mistral, DeepSeek, Ollama, OpenAI, and Anthropic**. Extracts per-provider keys and model maps (JSON dictionary) via safe, resilient parsing without requiring extra setting rows.
 
 ### `lib/ui/`
 - **`dashboardTemplate.js`**: Renders the complete HTML shell with embedded client-side routing (`Reviewer`, `History Logs`, `Settings`), keyboard shortcuts, dynamic theme switcher, Amplenote Revision History legend, and synchronized dual-pane scroll locks.

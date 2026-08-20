@@ -29,8 +29,8 @@ var PROVIDERS = {
   OPENAI: "OpenAI",
   ANTHROPIC: "Anthropic"
 };
-var DEFAULT_PROVIDER2 = PROVIDERS.OPENROUTER;
-var DEFAULT_MODELS2 = {
+var DEFAULT_PROVIDER = PROVIDERS.OPENROUTER;
+var DEFAULT_MODELS = {
   [PROVIDERS.OPENROUTER]: "openai/gpt-oss-120b:free",
   [PROVIDERS.GEMINI]: "gemini-3.5-flash-lite",
   [PROVIDERS.GROQ]: "openai/gpt-oss-120b",
@@ -171,26 +171,26 @@ function tokenizeContent(text, mode = GRANULARITY_MODES.PARAGRAPH) {
   if (!text || typeof text !== "string") {
     return [];
   }
+  const normalized = text.replace(/\r\n/g, "\n");
   if (mode === GRANULARITY_MODES.FULL) {
     return [
       {
         id: 1,
-        original: text,
+        original: normalized,
         type: "full",
-        isInspectable: text.trim().length > 0
+        isInspectable: normalized.trim().length > 0
       }
     ];
   }
-  if (mode === GRANULARITY_MODES.PARAGRAPH) {
-    return tokenizeParagraphs(text);
-  }
   if (mode === GRANULARITY_MODES.SENTENCE) {
-    return tokenizeSentences(text);
+    return tokenizeSentences(normalized);
   }
-  return tokenizeParagraphs(text);
+  return tokenizeParagraphs(normalized);
 }
 function tokenizeParagraphs(text) {
-  const lines = text.split("\n");
+  if (!text || typeof text !== "string") return [];
+  const normalized = text.replace(/\r\n/g, "\n");
+  const lines = normalized.split("\n");
   const paragraphs = [];
   let currentBuffer = [];
   let inCodeFence = false;
@@ -312,17 +312,18 @@ function computeTokenDiff(a, b) {
   let j = m;
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && a[i - 1] === b[j - 1]) {
-      diff.unshift({ type: "equal", value: a[i - 1] });
+      diff.push({ type: "equal", value: a[i - 1] });
       i--;
       j--;
     } else if (j > 0 && (i === 0 || matrix[i][j - 1] >= matrix[i - 1][j])) {
-      diff.unshift({ type: "insert", value: b[j - 1] });
+      diff.push({ type: "insert", value: b[j - 1] });
       j--;
     } else if (i > 0 && (j === 0 || matrix[i][j - 1] < matrix[i - 1][j])) {
-      diff.unshift({ type: "delete", value: a[i - 1] });
+      diff.push({ type: "delete", value: a[i - 1] });
       i--;
     }
   }
+  diff.reverse();
   return diff;
 }
 function computeWordDiff(original = "", suggested = "") {
@@ -409,6 +410,9 @@ var ReviewSession = class _ReviewSession {
     this.history = [];
     this.initializeItems();
   }
+  /**
+   * Initializes the session items by tokenizing the original document content.
+   */
   initializeItems() {
     const rawTokens = tokenizeContent(this.originalContent, this.granularity);
     this.items = rawTokens.map((token) => ({
@@ -487,6 +491,16 @@ var ReviewSession = class _ReviewSession {
   }
   /**
    * Returns summary metrics for the review session.
+   * @returns {{
+   *   total: number,
+   *   reviewed: number,
+   *   accepted: number,
+   *   rejected: number,
+   *   pending: number,
+   *   percentComplete: number,
+   *   totalAdditions: number,
+   *   totalDeletions: number
+   * }}
    */
   getMetrics() {
     const inspectable = this.items.filter((i) => i.isInspectable);
@@ -648,7 +662,7 @@ var OpenAIProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.openai.com/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.OPENAI]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.OPENAI]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -689,7 +703,7 @@ var AnthropicProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.anthropic.com/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.ANTHROPIC]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.ANTHROPIC]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -732,7 +746,7 @@ var GeminiProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://generativelanguage.googleapis.com/v1beta",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.GEMINI]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.GEMINI]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -780,7 +794,7 @@ var OpenRouterProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://openrouter.ai/api/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.OPENROUTER]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.OPENROUTER]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -823,7 +837,7 @@ var GroqProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.groq.com/openai/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.GROQ]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.GROQ]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -864,7 +878,7 @@ var DeepSeekProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.deepseek.com",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.DEEPSEEK]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.DEEPSEEK]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -905,7 +919,7 @@ var MistralProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "https://api.mistral.ai/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.MISTRAL]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.MISTRAL]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -946,7 +960,7 @@ var OllamaProvider = class extends BaseProvider {
     super({
       ...config,
       baseUrl: config.baseUrl || "http://localhost:11434/v1",
-      defaultModel: config.defaultModel || DEFAULT_MODELS2[PROVIDERS.OLLAMA]
+      defaultModel: config.defaultModel || DEFAULT_MODELS[PROVIDERS.OLLAMA]
     });
   }
   async complete({ prompt, systemPrompt, model, temperature = 0.3 }) {
@@ -982,24 +996,27 @@ var OllamaProvider = class extends BaseProvider {
 };
 
 // anp-23-grammar-reviewer/lib/providers/providerRegistry.js
+function safeParseJSON(str, fallback = {}) {
+  if (!str || typeof str !== "string") return fallback;
+  const trimmed = str.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return fallback;
+  try {
+    const parsed = JSON.parse(trimmed);
+    return typeof parsed === "object" && parsed !== null ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
 function getProviderConfig(app) {
   const settings = app?.settings || {};
-  const selectedProvider = settings["AI Provider"] || DEFAULT_PROVIDER2;
+  const selectedProvider = settings["AI Provider"] || DEFAULT_PROVIDER;
   const keys = {};
   const allModels = {};
-  let rawCustomModelSetting = settings["Custom AI Model"] || "";
-  let parsedCustomModels = {};
-  if (rawCustomModelSetting && typeof rawCustomModelSetting === "string") {
-    try {
-      if (rawCustomModelSetting.trim().startsWith("{")) {
-        const parsed = JSON.parse(rawCustomModelSetting);
-        if (typeof parsed === "object" && parsed !== null) {
-          parsedCustomModels = parsed;
-        }
-      } else {
-        parsedCustomModels[selectedProvider] = rawCustomModelSetting.trim();
-      }
-    } catch (e) {
+  const rawCustomModelSetting = settings["Custom AI Model"] || "";
+  let parsedCustomModels = safeParseJSON(rawCustomModelSetting, null);
+  if (!parsedCustomModels) {
+    parsedCustomModels = {};
+    if (typeof rawCustomModelSetting === "string" && rawCustomModelSetting.trim()) {
       parsedCustomModels[selectedProvider] = rawCustomModelSetting.trim();
     }
   }
@@ -1008,19 +1025,13 @@ function getProviderConfig(app) {
     let extractedKey = "";
     let extractedModel = parsedCustomModels[p] || "";
     if (rawVal && typeof rawVal === "string") {
-      try {
-        if (rawVal.trim().startsWith("{")) {
-          const parsed = JSON.parse(rawVal);
-          if (typeof parsed === "object" && parsed !== null) {
-            extractedKey = parsed.apiKey || parsed.key || "";
-            if (parsed.model || parsed.customModel) {
-              extractedModel = parsed.model || parsed.customModel;
-            }
-          }
-        } else {
-          extractedKey = rawVal.trim();
+      const parsedObj = safeParseJSON(rawVal, null);
+      if (parsedObj) {
+        extractedKey = parsedObj.apiKey || parsedObj.key || "";
+        if (parsedObj.model || parsedObj.customModel) {
+          extractedModel = parsedObj.model || parsedObj.customModel;
         }
-      } catch (e) {
+      } else {
         extractedKey = rawVal.trim();
       }
     }
@@ -1038,8 +1049,8 @@ function getProviderConfig(app) {
     customBaseUrl
   };
 }
-function createProviderInstance({ provider = DEFAULT_PROVIDER2, apiKey = "", baseUrl = "", defaultModel = "" } = {}) {
-  const finalModel = defaultModel || DEFAULT_MODELS2[provider];
+function createProviderInstance({ provider = DEFAULT_PROVIDER, apiKey = "", baseUrl = "", defaultModel = "" } = {}) {
+  const finalModel = defaultModel || DEFAULT_MODELS[provider];
   switch (provider) {
     case PROVIDERS.DEEPSEEK:
       return new DeepSeekProvider({ apiKey, defaultModel: finalModel });
@@ -1122,7 +1133,7 @@ async function launchReviewer(app, targetNoteUUID, forcePrompt = false) {
       originalContent: noteContent,
       granularity: GRANULARITY_MODES.FULL,
       provider: config.provider,
-      model: config.customModel || DEFAULT_MODELS2[config.provider] || ""
+      model: config.customModel || DEFAULT_MODELS[config.provider] || ""
     });
     setActiveSession(session);
     await app.openEmbed();
@@ -1426,7 +1437,15 @@ async function handleSaveAndCommit(app, createAuditNotes = false) {
   }
   const finalContent = session.getReconstructedContent();
   const noteUUID = session.noteUUID;
-  await app.replaceNoteContent({ uuid: noteUUID }, finalContent);
+  if (!noteUUID || typeof noteUUID !== "string") {
+    throw new Error("Cannot save: Target note UUID is missing or invalid.");
+  }
+  try {
+    await app.replaceNoteContent({ uuid: noteUUID }, finalContent);
+  } catch (err) {
+    const message = err?.message || String(err);
+    throw new Error(`Failed to update note (${noteUUID}): ${message}`);
+  }
   let changesNoteUUID = null;
   let historyNoteUUID = null;
   if (createAuditNotes) {
@@ -2424,7 +2443,7 @@ kbd {
 // anp-23-grammar-reviewer/lib/ui/promptSelectorComponent.js
 function renderSidebarPanel(session, config, metrics) {
   const currentProvider = session?.provider || config.provider || PROVIDERS.OPENROUTER;
-  const currentModel = session?.model || config.customModel || DEFAULT_MODELS2[currentProvider] || "";
+  const currentModel = session?.model || config.customModel || DEFAULT_MODELS[currentProvider] || "";
   const currentGranularity = session?.granularity || "full";
   const currentPreset = session?.promptPresetId || "grammar_spelling";
   const savedProviders = Object.values(PROVIDERS).filter((p) => {
@@ -3347,6 +3366,19 @@ function renderSettingsWorkspace(config) {
 
 // anp-23-grammar-reviewer/grammar-reviewer.js
 var activeTabState = "review";
+function parseCustomModelSetting(rawSetting) {
+  if (!rawSetting || typeof rawSetting !== "string") return {};
+  const trimmed = rawSetting.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return typeof parsed === "object" && parsed !== null ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 var plugin = {
   // App-level action: launches Grammar Reviewer across notes
   appOption: {
@@ -3415,14 +3447,7 @@ var plugin = {
               }
             }
             if (targetProvider && customModel !== void 0) {
-              let modelMap = {};
-              try {
-                const rawModelSetting = app.settings?.["Custom AI Model"];
-                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
-                  modelMap = JSON.parse(rawModelSetting);
-                }
-              } catch (e) {
-              }
+              const modelMap = parseCustomModelSetting(app.settings?.["Custom AI Model"]);
               modelMap[targetProvider] = customModel.trim();
               await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }
@@ -3447,17 +3472,8 @@ var plugin = {
         case "setProvider": {
           const newProvider = args[1];
           if (newProvider) {
-            let savedModelForNewProvider = DEFAULT_MODELS[newProvider] || "";
-            try {
-              const rawModelSetting = app.settings?.["Custom AI Model"];
-              if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
-                const parsed = JSON.parse(rawModelSetting);
-                if (parsed[newProvider]) {
-                  savedModelForNewProvider = parsed[newProvider];
-                }
-              }
-            } catch (e) {
-            }
+            const savedModels = parseCustomModelSetting(app.settings?.["Custom AI Model"]);
+            const savedModelForNewProvider = savedModels[newProvider] || DEFAULT_MODELS[newProvider] || "";
             if (session) {
               session.provider = newProvider;
               session.model = savedModelForNewProvider;
@@ -3476,14 +3492,7 @@ var plugin = {
               session.model = newModel;
             }
             if (typeof app.setSetting === "function") {
-              let modelMap = {};
-              try {
-                const rawModelSetting = app.settings?.["Custom AI Model"];
-                if (rawModelSetting && rawModelSetting.trim().startsWith("{")) {
-                  modelMap = JSON.parse(rawModelSetting);
-                }
-              } catch (e) {
-              }
+              const modelMap = parseCustomModelSetting(app.settings?.["Custom AI Model"]);
               modelMap[curProvider] = newModel.trim();
               await app.setSetting("Custom AI Model", JSON.stringify(modelMap));
             }
